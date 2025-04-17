@@ -120,7 +120,7 @@ const cli = meow(
         type: "string",
         aliases: ["a"],
         description:
-          "Determine the approval mode for Codex (default: suggest) Values: suggest, auto-edit, full-auto",
+          "Determine the approval mode for Nova Codex (default: suggest) Values: suggest, auto-edit, full-auto",
       },
       noProjectDoc: {
         type: "boolean",
