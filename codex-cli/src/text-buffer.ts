@@ -108,7 +108,7 @@ export default class TextBuffer {
    * =================================================================== */
 
   /**
-   * Opens the current buffer contents in the user’s preferred terminal text
+   * Opens the current buffer contents in the user's preferred terminal text
    * editor ($VISUAL or $EDITOR, falling back to "vi").  The method blocks
    * until the editor exits, then reloads the file and replaces the in‑memory
    * buffer with whatever the user saved.
@@ -119,7 +119,7 @@ export default class TextBuffer {
    *
    * Note: We purposefully rely on the *synchronous* spawn API so that the
    * calling process genuinely waits for the editor to close before
-   * continuing.  This mirrors Git’s behaviour and simplifies downstream
+   * continuing.  This mirrors Git's behaviour and simplifies downstream
    * control‑flow (callers can simply `await` the Promise).
    */
   async openInExternalEditor(opts: { editor?: string } = {}): Promise<void> {
@@ -143,7 +143,7 @@ export default class TextBuffer {
 
     // Prepare a temporary file with the current contents.  We use mkdtempSync
     // to obtain an isolated directory and avoid name collisions.
-    const tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), "codex-edit-"));
+    const tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), "neo-edit-"));
     const filePath = pathMod.join(tmpDir, "buffer.txt");
 
     fs.writeFileSync(filePath, this.getText(), "utf8");

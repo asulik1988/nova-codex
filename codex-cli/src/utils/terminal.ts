@@ -11,7 +11,7 @@ let didRunOnExit = false;
 export function setInkRenderer(renderer: Instance): void {
   inkRenderer = renderer;
 
-  if (process.env["CODEX_FPS_DEBUG"]) {
+  if (process.env["NEO_FPS_DEBUG"]) {
     let last = Date.now();
     const logFrame = () => {
       const now = Date.now();
@@ -21,7 +21,7 @@ export function setInkRenderer(renderer: Instance): void {
     };
 
     // Monkey‑patch the public rerender/unmount methods so we know when Ink
-    // flushes a new frame.  React’s internal renders eventually call
+    // flushes a new frame.  React's internal renders eventually call
     // `rerender()` so this gives us a good approximation without poking into
     // private APIs.
     const origRerender = renderer.rerender.bind(renderer);
@@ -39,7 +39,7 @@ export function setInkRenderer(renderer: Instance): void {
 }
 
 export function clearTerminal(): void {
-  if (process.env["CODEX_QUIET_MODE"] === "1") {
+  if (process.env["NEO_QUIET_MODE"] === "1") {
     return;
   }
 
@@ -67,7 +67,7 @@ export function onExit(): void {
   // First make sure Ink is properly unmounted so it can restore any terminal
   // state it modified (e.g. raw‑mode on stdin). Failing to do so leaves the
   // terminal in raw‑mode after the Node process has exited which looks like
-  // a “frozen” shell – no input is echoed and Ctrl‑C/Z no longer work. This
+  // a "frozen" shell – no input is echoed and Ctrl‑C/Z no longer work. This
   // regression was introduced when we switched from `inkRenderer.unmount()`
   // to letting `process.exit` terminate the program a few commits ago. By
   // explicitly unmounting here we ensure Ink performs its clean‑up logic
