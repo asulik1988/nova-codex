@@ -1,0 +1,409 @@
+[DEBUG 2025-04-19T03:39:10.493Z] CLI startup
+[DEBUG 2025-04-19T03:39:10.494Z] Imports starting
+[DEBUG 2025-04-19T03:39:10.494Z] All imports completed
+[DEBUG 2025-04-19T03:39:10.494Z] Logger initialized
+[DEBUG 2025-04-19T03:39:10.494Z] Parsing CLI arguments
+[DEBUG 2025-04-19T03:39:10.512Z] CLI arguments parsed {
+  input: [],
+  flags: {
+    help: false,
+    image: [],
+    quiet: false,
+    config: false,
+    dangerouslyAutoApproveEverything: false,
+    autoEdit: false,
+    fullAuto: false,
+    noProjectDoc: false,
+    fullStdout: false,
+    noTruncate: false,
+    fullContext: false
+  }
+}
+[DEBUG 2025-04-19T03:39:10.512Z] Checking API key
+[DEBUG 2025-04-19T03:39:10.512Z] Loading configuration
+[DEBUG 2025-04-19T03:39:10.513Z] Configuration loaded {
+  model: 'o4-mini',
+  fullContext: false,
+  cwd: '/Users/adamsulik/Documents/git/nova-codex/codex-cli'
+}
+[DEBUG 2025-04-19T03:39:10.513Z] Processing command input { prompt: undefined, model: '(using default)', hasImages: false }
+[DEBUG 2025-04-19T03:39:10.513Z] Checking if model is supported { model: 'o4-mini' }
+[DEBUG 2025-04-19T03:39:10.513Z] Model is supported
+[DEBUG 2025-04-19T03:39:10.513Z] Determining approval policy
+[DEBUG 2025-04-19T03:39:10.513Z] Approval policy set { policy: 'suggest' }
+[DEBUG 2025-04-19T03:39:10.513Z] Preloading models
+[DEBUG 2025-04-19T03:39:10.513Z] Models preloaded successfully
+[DEBUG 2025-04-19T03:39:10.513Z] Rendering main application
+Initializing agent…
+[DEBUG 2025-04-19T03:39:10.530Z] Application rendered successfully
+[DEBUG 2025-04-19T03:39:10.530Z] Ink renderer set
+[DEBUG 2025-04-19T03:39:10.530Z] TTY detected, setting up Ctrl-C handler
+[DEBUG 2025-04-19T03:39:10.530Z] CLI initialization complete
+[2K[1A[2K[G╭──────────────────────────────────────────────────────────────╮
+│ ● Nova Codex (research preview) v0.1.2504161510              │
+╰──────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────╮
+│ localhost session: a6421fd5b44948aaad86f648bf7bfce8          │
+│ ↳ workdir: ~/Documents/git/nova-codex/codex-cli              │
+│ ↳ model: o4-mini                                             │
+│ ↳ approval: suggest                                          │
+╰──────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message or press tab to select a suggestion                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  try: explain this codebase to me | fix any build errors | are there any bugs
+   in my code?
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ /                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ /m                                                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ /mo                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ /mod                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ /mode                                                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ /model                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ /models                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message or press tab to select a suggestion                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  try: explain this codebase to me | fix any build errors | are there any bugs
+   in my code?
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Switch model                                                                 │
+│ Current model: o4-mini                                                       │
+│                                                                              │
+│                                                                              │
+│ type to search · enter to confirm · esc to cancel                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message or press tab to select a suggestion                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  try: explain this codebase to me | fix any build errors | are there any bugs
+   in my code?
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Switch model                                                                 │
+│ Current model: o4-mini                                                       │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│ ❯ ⭐ o4-mini                                                                  │
+│   ⭐ o3                                                                       │
+│   ⭐ amazon.nova-pro-v1:0                                                     │
+│   babbage-002                                                                │
+│   chatgpt-4o-latest                                                          │
+│   computer-use-preview                                                       │
+│   computer-use-preview-2025-03-11                                            │
+│   dall-e-2                                                                   │
+│   dall-e-3                                                                   │
+│   davinci-002                                                                │
+│ type to search · enter to confirm · esc to cancel                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message or press tab to select a suggestion                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  try: explain this codebase to me | fix any build errors | are there any bugs
+   in my code?
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Switch model                                                                 │
+│ Current model: o4-mini                                                       │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│   ⭐ o4-mini                                                                  │
+│ ❯ ⭐ o3                                                                       │
+│   ⭐ amazon.nova-pro-v1:0                                                     │
+│   babbage-002                                                                │
+│   chatgpt-4o-latest                                                          │
+│   computer-use-preview                                                       │
+│   computer-use-preview-2025-03-11                                            │
+│   dall-e-2                                                                   │
+│   dall-e-3                                                                   │
+│   davinci-002                                                                │
+│ type to search · enter to confirm · esc to cancel                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message or press tab to select a suggestion                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  try: explain this codebase to me | fix any build errors | are there any bugs
+   in my code?
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Switch model                                                                 │
+│ Current model: o4-mini                                                       │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│   ⭐ o4-mini                                                                  │
+│   ⭐ o3                                                                       │
+│ ❯ ⭐ amazon.nova-pro-v1:0                                                     │
+│   babbage-002                                                                │
+│   chatgpt-4o-latest                                                          │
+│   computer-use-preview                                                       │
+│   computer-use-preview-2025-03-11                                            │
+│   dall-e-2                                                                   │
+│   dall-e-3                                                                   │
+│   davinci-002                                                                │
+│ type to search · enter to confirm · esc to cancel                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+    system
+    Switched model to o4-mini
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message                                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+⚠️  Amazon Bedrock model selected. Make sure AWS credentials are properly configured.
+   Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION environment variables.
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+    system
+    Switched model to amazon.nova-pro-v1:0
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message                                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ w                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ wh                                                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ wha                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what i                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is y                                                                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is yo                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is you                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is your                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is your n                                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is your na                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is your nam                                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is your name                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ what is your name?                                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+thinking for 0s
+╭──────────────────────────────────────────────────────────────────────────────╮
+│( ●    )  Thinking                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message                                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[Guser
+what is your name?
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message                                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ h                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ he                                                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ hel                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ hell                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ hello                                                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ hello?                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ hello??                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+thinking for 0s
+╭──────────────────────────────────────────────────────────────────────────────╮
+│( ●    )  Thinking                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message                                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[Guser
+hello??
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message                                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ e                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ ex                                                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ exi                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ exit                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G╭──────────────────────────────────────────────────────────────────────────────╮
+│ send a message                                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  send q or ctrl+c to exit | send "/clear" to reset | send "/help" for
+  commands | press enter to send
+

@@ -1,8 +1,9 @@
 import { OPENAI_API_KEY } from "./config";
 import OpenAI from "openai";
+import { NOVA_PRO_MODEL_ID } from "./bedrock-agent";
 
 const MODEL_LIST_TIMEOUT_MS = 2_000; // 2 seconds
-export const RECOMMENDED_MODELS: Array<string> = ["o4-mini", "o3"];
+export const RECOMMENDED_MODELS: Array<string> = ["o4-mini", "o3", NOVA_PRO_MODEL_ID];
 
 /**
  * Background model loader / cache.
@@ -30,6 +31,9 @@ async function fetchModels(): Promise<Array<string>> {
         models.push(model.id);
       }
     }
+
+    // Add the Bedrock model which won't be in OpenAI's list
+    models.push(NOVA_PRO_MODEL_ID);
 
     return models.sort();
   } catch {

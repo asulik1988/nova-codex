@@ -35,6 +35,10 @@ export const OPENAI_TIMEOUT_MS =
   parseInt(process.env["OPENAI_TIMEOUT_MS"] || "0", 10) || undefined;
 export const OPENAI_BASE_URL = process.env["OPENAI_BASE_URL"] || "";
 export let OPENAI_API_KEY = process.env["OPENAI_API_KEY"] || "";
+export const AWS_REGION = process.env["AWS_REGION"] || process.env["AWS_DEFAULT_REGION"] || "us-east-1";
+export const AWS_ACCESS_KEY_ID = process.env["AWS_ACCESS_KEY_ID"] || "";
+export const AWS_SECRET_ACCESS_KEY = process.env["AWS_SECRET_ACCESS_KEY"] || "";
+export const AWS_SESSION_TOKEN = process.env["AWS_SESSION_TOKEN"] || "";
 
 export function setApiKey(apiKey: string): void {
   OPENAI_API_KEY = apiKey;
@@ -78,7 +82,7 @@ export type AppConfig = {
 
 export const PROJECT_DOC_MAX_BYTES = 32 * 1024; // 32 kB
 
-const PROJECT_DOC_FILENAMES = ["neo.md", ".neo.md", "NEO.md"];
+const PROJECT_DOC_FILENAMES = ["neo.md", ".neo.md", "NEO.md", "codex.md"];
 
 export function discoverProjectDocPath(startDir: string): string | null {
   const cwd = resolvePath(startDir);
@@ -235,9 +239,21 @@ export const loadConfig = (
     }
   }
 
-  const combinedInstructions = [userInstructions, projectDoc]
-    .filter((s) => s && s.trim() !== "")
-    .join("\n\n--- project-doc ---\n\n");
+  // Only include the project doc separator if both user instructions and project doc exist
+  const combinedInstructions = (() => {
+    const hasUserInstructions = userInstructions && userInstructions.trim() !== "";
+    const hasProjectDoc = projectDoc && projectDoc.trim() !== "";
+    
+    if (hasUserInstructions && hasProjectDoc) {
+      return `${userInstructions}\n\n--- project-doc ---\n\n${projectDoc}`;
+    } else if (hasUserInstructions) {
+      return userInstructions;
+    } else if (hasProjectDoc) {
+      return projectDoc;
+    } else {
+      return "";
+    }
+  })();
 
   // Treat empty string ("" or whitespace) as absence so we can fall back to
   // the latest DEFAULT_MODEL.

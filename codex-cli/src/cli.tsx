@@ -5,11 +5,29 @@ import "dotenv/config";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (process as any).noDeprecation = true;
 
+// Add debugging function for consistent logging
+function debug(message: string, data?: any): void {
+  const timestamp = new Date().toISOString();
+  const formattedMsg = `[DEBUG ${timestamp}] ${message}`;
+  
+  if (data) {
+    console.error(formattedMsg, data);
+  } else {
+    console.error(formattedMsg);
+  }
+}
+
+// Log startup
+debug("CLI startup");
+
 import type { AppRollout } from "./app";
 import type { ApprovalPolicy } from "./approvals";
 import type { CommandConfirmation } from "./utils/agent/agent-loop";
 import type { AppConfig } from "./utils/config";
 import type { ResponseItem } from "openai/resources/responses/responses";
+
+// Log imports completed
+debug("Imports starting");
 
 import App from "./app";
 import { runSinglePass } from "./cli_singlepass";
@@ -37,14 +55,21 @@ import meow from "meow";
 import path from "path";
 import React from "react";
 
+// Log that all modules have been imported
+debug("All imports completed");
+
 // Call this early so `tail -F "$TMPDIR/oai-codex/codex-cli-latest.log"` works
 // immediately. This must be run with DEBUG=1 for logging to work.
 initLogger();
+debug("Logger initialized");
 
 // TODO: migrate to new versions of quiet mode
 //
 //     -q, --quiet    Non-interactive quiet mode that only prints final message
 //     -j, --json     Non-interactive JSON output mode that prints JSON messages
+
+// Log command line argument parsing
+debug("Parsing CLI arguments");
 
 const cli = meow(
   `
@@ -149,8 +174,11 @@ const cli = meow(
   },
 );
 
+debug("CLI arguments parsed", { input: cli.input, flags: cli.flags });
+
 // Handle 'completion' subcommand before any prompting or API calls
 if (cli.input[0] === "completion") {
+  debug("Handling completion subcommand", { shell: cli.input[1] });
   const shell = cli.input[1] || "bash";
   const scripts: Record<string, string> = {
     bash: `# bash completion for codex
@@ -182,20 +210,24 @@ complete -c codex -a '(_fish_complete_path)' -d 'file path'`,
 }
 // Show help if requested
 if (cli.flags.help) {
+  debug("Help flag detected, showing help");
   cli.showHelp();
 }
 
 // Handle config flag: open instructions file in editor and exit
 if (cli.flags.config) {
+  debug("Config flag detected, opening instructions file");
   // Ensure configuration and instructions file exist
   try {
     loadConfig();
-  } catch {
+  } catch (err) {
     // ignore errors
+    debug("Error loading config", err);
   }
   const filePath = INSTRUCTIONS_FILEPATH;
   const editor =
     process.env["EDITOR"] || (process.platform === "win32" ? "notepad" : "vi");
+  debug("Opening editor", { editor, filePath });
   spawnSync(editor, [filePath], { stdio: "inherit" });
   process.exit(0);
 }
@@ -203,10 +235,12 @@ if (cli.flags.config) {
 // ---------------------------------------------------------------------------
 // API key handling
 // ---------------------------------------------------------------------------
+debug("Checking API key");
 
 const apiKey = process.env["OPENAI_API_KEY"];
 
 if (!apiKey) {
+  debug("Missing OpenAI API key");
   // eslint-disable-next-line no-console
   console.error(
     `\n${chalk.red("Missing OpenAI API key.")}\n\n` +
@@ -219,17 +253,36 @@ if (!apiKey) {
   process.exit(1);
 }
 
+debug("Loading configuration");
 const fullContextMode = Boolean(cli.flags.fullContext);
-let config = loadConfig(undefined, undefined, {
-  cwd: process.cwd(),
-  disableProjectDoc: Boolean(cli.flags.noProjectDoc),
-  projectDocPath: cli.flags.projectDoc as string | undefined,
-  isFullContext: fullContextMode,
-});
+let config: AppConfig;
+try {
+  config = loadConfig(undefined, undefined, {
+    cwd: process.cwd(),
+    disableProjectDoc: Boolean(cli.flags.noProjectDoc),
+    projectDocPath: cli.flags.projectDoc as string | undefined,
+    isFullContext: fullContextMode,
+  });
+  debug("Configuration loaded", { 
+    model: config.model, 
+    fullContext: fullContextMode,
+    cwd: process.cwd() 
+  });
+} catch (err) {
+  debug("Error loading configuration", err);
+  console.error("Failed to load configuration:", err);
+  process.exit(1);
+}
 
 const prompt = cli.input[0];
 const model = cli.flags.model;
 const imagePaths = cli.flags.image as Array<string> | undefined;
+
+debug("Processing command input", { 
+  prompt,
+  model: model || "(using default)",
+  hasImages: imagePaths ? imagePaths.length > 0 : false
+});
 
 config = {
   apiKey,
@@ -237,28 +290,41 @@ config = {
   model: model ?? config.model,
 };
 
-if (!(await isModelSupportedForResponses(config.model))) {
-  // eslint-disable-next-line no-console
-  console.error(
-    `The model "${config.model}" does not appear in the list of models ` +
-      `available to your account. Double‑check the spelling (use\n` +
-      `  openai models list\n` +
-      `to see the full list) or choose another model with the --model flag.`,
-  );
+debug("Checking if model is supported", { model: config.model });
+try {
+  if (!(await isModelSupportedForResponses(config.model))) {
+    debug("Model not supported", { model: config.model });
+    // eslint-disable-next-line no-console
+    console.error(
+      `The model "${config.model}" does not appear in the list of models ` +
+        `available to your account. Double‑check the spelling (use\n` +
+        `  openai models list\n` +
+        `to see the full list) or choose another model with the --model flag.`,
+    );
+    process.exit(1);
+  }
+  debug("Model is supported");
+} catch (err) {
+  debug("Error checking model support", err);
+  console.error("Failed to check model support:", err);
   process.exit(1);
 }
 
 let rollout: AppRollout | undefined;
 
 if (cli.flags.view) {
+  debug("View flag detected, loading rollout");
   const viewPath = cli.flags.view;
   const absolutePath = path.isAbsolute(viewPath)
     ? viewPath
     : path.join(process.cwd(), viewPath);
+  debug("Loading rollout from path", { absolutePath });
   try {
     const content = fs.readFileSync(absolutePath, "utf-8");
     rollout = JSON.parse(content) as AppRollout;
+    debug("Rollout loaded successfully");
   } catch (error) {
+    debug("Error reading rollout file", error);
     // eslint-disable-next-line no-console
     console.error("Error reading rollout file:", error);
     process.exit(1);
@@ -267,11 +333,18 @@ if (cli.flags.view) {
 
 // If we are running in --fullcontext mode, do that and exit.
 if (fullContextMode) {
-  await runSinglePass({
-    originalPrompt: prompt,
-    config,
-    rootPath: process.cwd(),
-  });
+  debug("Running in full context mode");
+  try {
+    await runSinglePass({
+      originalPrompt: prompt,
+      config,
+      rootPath: process.cwd(),
+    });
+    debug("Single pass completed successfully");
+  } catch (err) {
+    debug("Error in single pass mode", err);
+    console.error("Error in full context mode:", err);
+  }
   onExit();
   process.exit(0);
 }
@@ -284,22 +357,37 @@ const autoApproveEverything = Boolean(
 const fullStdout = Boolean(cli.flags.fullStdout);
 
 if (quietMode) {
+  debug("Running in quiet mode");
   process.env["CODEX_QUIET_MODE"] = "1";
   if (!prompt || prompt.trim() === "") {
+    debug("Prompt missing in quiet mode");
     // eslint-disable-next-line no-console
     console.error(
       'Quiet mode requires a prompt string, e.g.,: codex -q "Fix bug #123 in the foobar project"',
     );
     process.exit(1);
   }
-  await runQuietMode({
-    prompt: prompt as string,
-    imagePaths: imagePaths || [],
-    approvalPolicy: autoApproveEverything
-      ? AutoApprovalMode.FULL_AUTO
-      : AutoApprovalMode.SUGGEST,
-    config,
+  
+  debug("Starting quiet mode execution", {
+    prompt,
+    approvalPolicy: autoApproveEverything ? "AUTO_APPROVE_EVERYTHING" : "SUGGEST"
   });
+  
+  try {
+    await runQuietMode({
+      prompt: prompt as string,
+      imagePaths: imagePaths || [],
+      approvalPolicy: autoApproveEverything
+        ? AutoApprovalMode.FULL_AUTO
+        : AutoApprovalMode.SUGGEST,
+      config,
+    });
+    debug("Quiet mode completed successfully");
+  } catch (err) {
+    debug("Error in quiet mode", err);
+    console.error("Error in quiet mode execution:", err);
+  }
+  
   onExit();
   process.exit(0);
 }
@@ -316,29 +404,47 @@ if (quietMode) {
 // 3. --autoEdit – automatically approve edits, but prompt for commands.
 // 4. Default – suggest mode (prompt for everything).
 
+debug("Determining approval policy");
 const approvalPolicy: ApprovalPolicy =
   cli.flags.fullAuto || cli.flags.approvalMode === "full-auto"
     ? AutoApprovalMode.FULL_AUTO
     : cli.flags.autoEdit || cli.flags.approvalMode === "auto-edit"
     ? AutoApprovalMode.AUTO_EDIT
     : AutoApprovalMode.SUGGEST;
+debug("Approval policy set", { policy: approvalPolicy });
 
-preloadModels();
+debug("Preloading models");
+try {
+  preloadModels();
+  debug("Models preloaded successfully");
+} catch (err) {
+  debug("Error preloading models", err);
+  console.error("Failed to preload models:", err);
+}
 
-const instance = render(
-  <App
-    prompt={prompt}
-    config={config}
-    rollout={rollout}
-    imagePaths={imagePaths}
-    approvalPolicy={approvalPolicy}
-    fullStdout={fullStdout}
-  />,
-  {
-    patchConsole: process.env["DEBUG"] ? false : true,
-  },
-);
-setInkRenderer(instance);
+debug("Rendering main application");
+try {
+  const instance = render(
+    <App
+      prompt={prompt}
+      config={config}
+      rollout={rollout}
+      imagePaths={imagePaths}
+      approvalPolicy={approvalPolicy}
+      fullStdout={fullStdout}
+    />,
+    {
+      patchConsole: process.env["DEBUG"] ? false : true,
+    },
+  );
+  debug("Application rendered successfully");
+  setInkRenderer(instance);
+  debug("Ink renderer set");
+} catch (err) {
+  debug("Error rendering application", err);
+  console.error("Failed to render application:", err);
+  process.exit(1);
+}
 
 function formatResponseItemForQuietMode(item: ResponseItem): string {
   if (!PRETTY_PRINT) {
@@ -400,33 +506,84 @@ async function runQuietMode({
   approvalPolicy: ApprovalPolicy;
   config: AppConfig;
 }): Promise<void> {
-  const agent = new AgentLoop({
-    model: config.model,
-    config: config,
-    instructions: config.instructions,
-    approvalPolicy,
-    onItem: (item: ResponseItem) => {
-      // eslint-disable-next-line no-console
-      console.log(formatResponseItemForQuietMode(item));
-    },
-    onLoading: () => {
-      /* intentionally ignored in quiet mode */
-    },
-    getCommandConfirmation: (
-      _command: Array<string>,
-    ): Promise<CommandConfirmation> => {
-      return Promise.resolve({ review: ReviewDecision.NO_CONTINUE });
-    },
-    onLastResponseId: () => {
-      /* intentionally ignored in quiet mode */
-    },
-  });
+  debug("Initializing agent loop for quiet mode");
+  try {
+    const agent = new AgentLoop({
+      model: config.model,
+      config: config,
+      instructions: config.instructions,
+      approvalPolicy,
+      onItem: (() => {
+        let currentMessageId: string | null = null;
+        let accumulatedContent: string[] = [];
+        return (item: ResponseItem) => {
+          if (item.type === 'message' && item.role === 'assistant') {
+            if (item.id !== currentMessageId) {
+              currentMessageId = item.id;
+              accumulatedContent = [];
+            }
+            for (const c of item.content) {
+              if (c.type === 'output_text') {
+                accumulatedContent.push(c.text);
+              }
+            }
+            if ((item as any).status === 'completed') {
+              // Prefer the longest content: either accumulated or final event's content
+              const finalText = item.content
+                .filter((c) => c.type === 'output_text')
+                .map((c) => c.text)
+                .join('');
+              const output =
+                finalText.length > accumulatedContent.join('').length
+                  ? finalText
+                  : accumulatedContent.join('');
+              const fullItem = {
+                ...item,
+                content: [
+                  {
+                    type: 'output_text' as const,
+                    text: output,
+                    annotations: [] as any[],
+                  },
+                ],
+              };
+              // eslint-disable-next-line no-console
+              console.log(formatResponseItemForQuietMode(fullItem));
+              currentMessageId = null;
+              accumulatedContent = [];
+            }
+          } else {
+            // eslint-disable-next-line no-console
+            console.log(formatResponseItemForQuietMode(item));
+          }
+        };
+      })(),
+      onLoading: () => {
+        /* intentionally ignored in quiet mode */
+      },
+      getCommandConfirmation: (
+        _command: Array<string>,
+      ): Promise<CommandConfirmation> => {
+        return Promise.resolve({ review: ReviewDecision.NO_CONTINUE });
+      },
+      onLastResponseId: () => {
+        /* intentionally ignored in quiet mode */
+      },
+    });
 
-  const inputItem = await createInputItem(prompt, imagePaths);
-  await agent.run([inputItem]);
+    debug("Creating input item");
+    const inputItem = await createInputItem(prompt, imagePaths);
+    debug("Starting agent run");
+    await agent.run([inputItem]);
+    debug("Agent run completed");
+  } catch (err) {
+    debug("Error in agent loop execution", err);
+    console.error("Error executing agent:", err);
+  }
 }
 
 const exit = () => {
+  debug("Exit signal received, cleaning up");
   onExit();
   process.exit(0);
 };
@@ -440,6 +597,7 @@ process.on("SIGTERM", exit);
 // ---------------------------------------------------------------------------
 
 if (process.stdin.isTTY) {
+  debug("TTY detected, setting up Ctrl-C handler");
   // Ensure we do not leave the terminal in raw mode if the user presses
   // Ctrl‑C while some other component has focus and Ink is intercepting
   // input. Node does *not* emit a SIGINT in raw‑mode, so we listen for the
@@ -447,6 +605,7 @@ if (process.stdin.isTTY) {
   const onRawData = (data: Buffer | string): void => {
     const str = Buffer.isBuffer(data) ? data.toString("utf8") : data;
     if (str === "\u0003") {
+      debug("Ctrl-C detected in raw mode");
       exit();
     }
   };
@@ -456,3 +615,5 @@ if (process.stdin.isTTY) {
 // Ensure terminal clean‑up always runs, even when other code calls
 // `process.exit()` directly.
 process.once("exit", onExit);
+
+debug("CLI initialization complete");

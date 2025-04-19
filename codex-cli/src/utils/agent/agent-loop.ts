@@ -21,6 +21,7 @@ import {
 import { handleExecCommand } from "./handle-exec-command.js";
 import { randomUUID } from "node:crypto";
 import OpenAI, { APIConnectionTimeoutError } from "openai";
+import { streamBedrockResponse, NOVA_PRO_MODEL_ID, converseBedrockResponse } from "../bedrock-agent.js";
 
 // Wait time before retrying after rate limit errors (ms).
 const RATE_LIMIT_RETRY_WAIT_MS = parseInt(
@@ -492,50 +493,150 @@ export class AgentLoop {
                 reasoning.summary = "auto";
               }
             }
+            
             const mergedInstructions = [prefix, this.instructions]
               .filter(Boolean)
               .join("\n");
+              
             if (isLoggingEnabled()) {
               log(
                 `instructions (length ${mergedInstructions.length}): ${mergedInstructions}`,
               );
             }
-            // eslint-disable-next-line no-await-in-loop
-            stream = await this.oai.responses.create({
-              model: this.model,
-              instructions: mergedInstructions,
-              previous_response_id: lastResponseId || undefined,
-              input: turnInput,
-              stream: true,
-              parallel_tool_calls: false,
-              reasoning,
-              tools: [
-                {
-                  type: "function",
-                  name: "shell",
-                  description: "Runs a shell command, and returns its output.",
-                  strict: false,
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      command: { type: "array", items: { type: "string" } },
-                      workdir: {
-                        type: "string",
-                        description: "The working directory for the command.",
+            
+            // Check if we're using a Bedrock model
+            if (this.model === NOVA_PRO_MODEL_ID) {
+              if (isLoggingEnabled()) {
+                log(`[agent] Using Bedrock model: ${this.model}`);
+              }
+              try {
+                // Use converseBedrockResponse for Nova Pro (non-streaming, all modes)
+                let responseId: string | undefined = undefined;
+                const event = await converseBedrockResponse(
+                  this.model,
+                  {
+                    messages: [
+                      {
+                        role: "user",
+                        content: Array.isArray(turnInput)
+                          ? turnInput.map(item => {
+                              if (typeof item === 'string') return item;
+                              if (item && typeof item === 'object' && 'content' in item && Array.isArray(item.content)) {
+                                // Try to extract text from content array
+                                return item.content.map((c: any) => c.text || '').join(' ');
+                              }
+                              return String(item);
+                            }).join(' ')
+                          : String(turnInput),
                       },
-                      timeout: {
-                        type: "number",
-                        description:
-                          "The maximum time to wait for the command to complete in milliseconds.",
+                    ],
+                    model: this.model,
+                    tools: [
+                      {
+                        type: "function",
+                        name: "shell",
+                        description: "Runs a shell command, and returns its output.",
+                        strict: false,
+                        parameters: {
+                          type: "object",
+                          properties: {
+                            command: { type: "array", items: { type: "string" } },
+                            workdir: {
+                              type: "string",
+                              description: "The working directory for the command.",
+                            },
+                            timeout: {
+                              type: "number",
+                              description:
+                                "The maximum time to wait for the command to complete in milliseconds.",
+                            },
+                          },
+                          required: ["command"],
+                          additionalProperties: false,
+                        },
                       },
-                    },
-                    required: ["command"],
-                    additionalProperties: false,
+                    ],
+                    // Add inferenceConfig if needed, e.g. maxTokens, temperature, etc.
                   },
-                },
-              ],
-            });
-            break;
+                  undefined
+                );
+                if (event && event.type === 'response.output_item.done' && event.item) {
+                  this.onItem(event.item);
+                  if (!responseId && event.item.id) {
+                    responseId = event.item.id;
+                  }
+                }
+                this.currentStream = null; // Not needed for Bedrock but we set it for consistency
+                // All done – make sure the response id is propagated.
+                if (responseId) this.onLastResponseId(responseId);
+                break; // Successfully processed the Bedrock request
+              } catch (bedrockErr) {
+                // Handle specific errors for Bedrock
+                if (bedrockErr instanceof TypeError && 
+                    bedrockErr.message && 
+                    bedrockErr.message.includes("Cannot read properties of undefined")) {
+                  // This is likely a tool configuration issue with Bedrock
+                  this.onItem({
+                    id: `error-${Date.now()}`,
+                    type: "message",
+                    role: "system",
+                    content: [
+                      {
+                        type: "input_text",
+                        text: "⚠️ There was an issue with the Amazon Bedrock Nova Pro model's tool configuration. " +
+                              "This is likely an internal compatibility issue. Please try using an OpenAI model instead for now."
+                      },
+                    ],
+                  });
+                  this.onLoading(false);
+                  return;
+                }
+                
+                // For other Bedrock errors, log them and throw
+                if (isLoggingEnabled()) {
+                  log(`[agent] Bedrock error: ${bedrockErr}`);
+                }
+                throw bedrockErr;
+              }
+            } else {
+              // Original OpenAI code
+              // eslint-disable-next-line no-await-in-loop
+              stream = await this.oai.responses.create({
+                model: this.model,
+                instructions: mergedInstructions,
+                previous_response_id: lastResponseId || undefined,
+                input: turnInput,
+                stream: true,
+                parallel_tool_calls: false,
+                reasoning,
+                tools: [
+                  {
+                    type: "function",
+                    name: "shell",
+                    description: "Runs a shell command, and returns its output.",
+                    strict: false,
+                    parameters: {
+                      type: "object",
+                      properties: {
+                        command: { type: "array", items: { type: "string" } },
+                        workdir: {
+                          type: "string",
+                          description: "The working directory for the command.",
+                        },
+                        timeout: {
+                          type: "number",
+                          description:
+                            "The maximum time to wait for the command to complete in milliseconds.",
+                        },
+                      },
+                      required: ["command"],
+                      additionalProperties: false,
+                    },
+                  },
+                ],
+              });
+              break;
+            }
           } catch (error) {
             const isTimeout = error instanceof APIConnectionTimeoutError;
             // Lazily look up the APIConnectionError class at runtime to

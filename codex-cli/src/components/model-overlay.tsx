@@ -5,6 +5,8 @@ import {
 } from "../utils/model-utils.js";
 import { Box, Text, useInput } from "ink";
 import React, { useEffect, useState } from "react";
+import { log, isLoggingEnabled } from "../utils/agent/log.js";
+import { NOVA_PRO_MODEL_ID } from "../utils/bedrock-agent.js";
 
 /**
  * Props for <ModelOverlay>.
@@ -35,7 +37,7 @@ export default function ModelOverlay({
     (async () => {
       const models = await getAvailableModels();
 
-      // Split the list into recommended and “other” models.
+      // Split the list into recommended and "other" models.
       const recommended = RECOMMENDED_MODELS.filter((m) => models.includes(m));
       const others = models.filter((m) => !recommended.includes(m));
 
@@ -49,6 +51,23 @@ export default function ModelOverlay({
       );
     })();
   }, []);
+
+  // Handle model selection with credential reminder for Bedrock models
+  const handleModelSelect = (model: string) => {
+    if (model.includes('amazon.') || model === NOVA_PRO_MODEL_ID) {
+      if (isLoggingEnabled()) {
+        log(`[model] User selected Amazon Bedrock model: ${model}`);
+        log(`[model] Reminder: AWS credentials must be properly configured for Bedrock models`);
+      }
+      
+      // Display a message for the UI as well (this appears in the console)
+      console.warn('⚠️  Amazon Bedrock model selected. Make sure AWS credentials are properly configured.');
+      console.warn('   Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION environment variables.');
+    }
+    
+    // Call the original onSelect handler
+    onSelect(model);
+  };
 
   // ---------------------------------------------------------------------------
   // If the conversation already contains a response we cannot change the model
@@ -101,7 +120,7 @@ export default function ModelOverlay({
       }
       initialItems={items}
       currentValue={currentModel}
-      onSelect={onSelect}
+      onSelect={handleModelSelect}
       onExit={onExit}
     />
   );
