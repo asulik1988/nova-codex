@@ -61,6 +61,10 @@ export interface BedrockStreamingInput {
     content: string;
   }[];
   /**
+   * Optional system prompt for the conversation (array of { text: string } objects as expected by Bedrock).
+   */
+  system?: Array<{ text: string }>;
+  /**
    * Whether to stream the response
    */
   stream?: boolean;
@@ -1078,6 +1082,9 @@ export async function converseBedrockResponse(
     modelId: modelId,
     messages: bedrockMessages,
   };
+  if (params.system && Array.isArray(params.system)) {
+    input.system = params.system;
+  }
   if (params.inferenceConfig?.maxTokens) {
     input.inferenceConfig = {
       ...input.inferenceConfig,

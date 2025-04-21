@@ -440,6 +440,18 @@ export class AgentLoop {
 
       const staged: Array<ResponseItem | undefined> = [];
       const stageItem = (item: ResponseItem) => {
+        // ------------------------------------------------------------------
+        // Debug logging: dump *every* item (user requests **and** model
+        // responses) to the session log so that the full JSON payload can be
+        // inspected after the fact.  Only runs when DEBUG is enabled.
+        // ------------------------------------------------------------------
+        if (isLoggingEnabled()) {
+          try {
+            log(`ITEM_JSON: ${JSON.stringify(item)}`);
+          } catch {
+            /* best‑effort – JSON.stringify may fail for circular structures */
+          }
+        }
         // Ignore any stray events that belong to older generations.
         if (thisGeneration !== this.generation) {
           return;
@@ -474,6 +486,15 @@ export class AgentLoop {
           this.onLoading(false);
           return;
         }
+        // Log the full JSON of the current turn's input so we can trace the
+        // exact request that goes out to the model.
+        if (isLoggingEnabled()) {
+          try {
+            log(`USER_REQUEST_JSON: ${JSON.stringify(turnInput)}`);
+          } catch {
+            /* ignore stringify errors – debug logging should never crash */
+          }
+        }
         // send request to openAI
         for (const item of turnInput) {
           stageItem(item as ResponseItem);
@@ -500,7 +521,7 @@ export class AgentLoop {
               
             if (isLoggingEnabled()) {
               log(
-                `instructions (length ${mergedInstructions.length}): ${mergedInstructions}`,
+                `[agent-loop.ts]instructions (length ${mergedInstructions.length}): ${mergedInstructions}`,
               );
             }
             
@@ -510,55 +531,72 @@ export class AgentLoop {
                 log(`[agent] Using Bedrock model: ${this.model}`);
               }
               try {
-                // Use converseBedrockResponse for Nova Pro (non-streaming, all modes)
+                // Build Bedrock request payload
+                // 1. Convert the current turn input (user messages) into the format Bedrock expects.
+                const bedrockMessages = turnInput
+                  .filter(
+                    (it): it is ResponseInputItem.Message =>
+                      it.type === "message" && (it as ResponseInputItem.Message).role === "user",
+                  )
+                  .map((it) => {
+                    const text = it.content
+                      .filter((c) => c.type === "input_text")
+                      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return
+                      .map((c: any) => c.text as string)
+                      .join("\n");
+                    return {
+                      role: "user",
+                      content: text,
+                    };
+                  });
+
+                const bedrockRequest = {
+                  messages: bedrockMessages,
+                  model: this.model,
+                  tools: [
+                    {
+                      type: "function",
+                      name: "shell",
+                      description: "Runs a shell command, and returns its output.",
+                      strict: false,
+                      parameters: {
+                        type: "object",
+                        properties: {
+                          command: { type: "array", items: { type: "string" } },
+                          workdir: {
+                            type: "string",
+                            description: "The working directory for the command.",
+                          },
+                          timeout: {
+                            type: "number",
+                            description:
+                              "The maximum time to wait for the command to complete in milliseconds.",
+                          },
+                        },
+                        required: ["command"],
+                        additionalProperties: false,
+                      },
+                    },
+                  ],
+                  // Add inferenceConfig if needed, e.g. maxTokens, temperature, etc.
+                  system: [{ text: mergedInstructions }]
+                };
+
+                // Emit full JSON to the debug log
+                if (isLoggingEnabled()) {
+                  try {
+                    log(`BEDROCK_REQUEST_JSON: ${JSON.stringify(bedrockRequest, null, 2)}`);
+                  } catch {
+                    /* ignore */
+                  }
+                }
+
+                // Use converseBedrockResponse for Nova Pro (non‑streaming, all modes)
                 let responseId: string | undefined = undefined;
                 const event = await converseBedrockResponse(
                   this.model,
-                  {
-                    messages: [
-                      {
-                        role: "user",
-                        content: Array.isArray(turnInput)
-                          ? turnInput.map(item => {
-                              if (typeof item === 'string') return item;
-                              if (item && typeof item === 'object' && 'content' in item && Array.isArray(item.content)) {
-                                // Try to extract text from content array
-                                return item.content.map((c: any) => c.text || '').join(' ');
-                              }
-                              return String(item);
-                            }).join(' ')
-                          : String(turnInput),
-                      },
-                    ],
-                    model: this.model,
-                    tools: [
-                      {
-                        type: "function",
-                        name: "shell",
-                        description: "Runs a shell command, and returns its output.",
-                        strict: false,
-                        parameters: {
-                          type: "object",
-                          properties: {
-                            command: { type: "array", items: { type: "string" } },
-                            workdir: {
-                              type: "string",
-                              description: "The working directory for the command.",
-                            },
-                            timeout: {
-                              type: "number",
-                              description:
-                                "The maximum time to wait for the command to complete in milliseconds.",
-                            },
-                          },
-                          required: ["command"],
-                          additionalProperties: false,
-                        },
-                      },
-                    ],
-                    // Add inferenceConfig if needed, e.g. maxTokens, temperature, etc.
-                  },
-                  undefined
+                  bedrockRequest as any,
+                  undefined,
                 );
                 if (event && event.type === 'response.output_item.done' && event.item) {
                   this.onItem(event.item);
@@ -600,6 +638,56 @@ export class AgentLoop {
               }
             } else {
               // Original OpenAI code
+              if (isLoggingEnabled()) {
+                try {
+                  // Duplicate the payload structure used below so the log contains the full request.
+                  const modelRequest = {
+                    model: this.model,
+                    instructions: mergedInstructions,
+                    previous_response_id: lastResponseId || undefined,
+                    input: turnInput,
+                    stream: true,
+                    parallel_tool_calls: false,
+                    reasoning: reasoning,
+                    tools: [
+                      {
+                        type: "function",
+                        name: "shell",
+                        description: "Runs a shell command, and returns its output.",
+                        strict: false,
+                        parameters: {
+                          type: "object",
+                          properties: {
+                            command: {
+                              type: "array",
+                              items: { type: "string" }
+                            },
+                            workdir: {
+                              type: "string",
+                              description: "The working directory for the command."
+                            },
+                            timeout: {
+                              type: "number",
+                              description: "The maximum time to wait for the command to complete in milliseconds."
+                            }
+                          },
+                          required: ["command"],
+                          additionalProperties: false
+                        }
+                      }
+                    ]
+                  };
+                  
+                  log(
+                    "MODEL_REQUEST_JSON:\n" +
+                    JSON.stringify(modelRequest, null, 2)
+                  );
+                  
+                } catch {
+                  /* ignore */
+                }
+              }
+
               // eslint-disable-next-line no-await-in-loop
               stream = await this.oai.responses.create({
                 model: this.model,
@@ -827,7 +915,11 @@ export class AgentLoop {
           // eslint-disable-next-line no-await-in-loop
           for await (const event of stream) {
             if (isLoggingEnabled()) {
-              log(`AgentLoop.run(): response event ${event.type}`);
+              try {
+                log(`STREAM_EVENT_JSON: ${JSON.stringify(event)}`);
+              } catch {
+                log(`AgentLoop.run(): response event ${event.type}`);
+              }
             }
 
             // process and surface each item (no‑op until we can depend on streaming events)

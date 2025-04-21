@@ -1,0 +1,1 @@
+{"inference":{"temperature":1,"topP":1,"maxTokens":9999},"models":{"default":"amazon.nova-pro-v1:0"}}
