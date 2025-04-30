@@ -5,46 +5,27 @@ import "dotenv/config";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (process as any).noDeprecation = true;
 
-// Add debugging function for consistent logging
-function debug(message: string, data?: any): void {
-  const timestamp = new Date().toISOString();
-  const formattedMsg = `[DEBUG ${timestamp}] ${message}`;
-  
-  if (data) {
-    console.error(formattedMsg, data);
-  } else {
-    console.error(formattedMsg);
-  }
-}
-
-// Log startup
-debug("CLI startup");
-
 import type { AppRollout } from "./app";
 import type { ApprovalPolicy } from "./approvals";
 import type { CommandConfirmation } from "./utils/agent/agent-loop";
 import type { AppConfig } from "./utils/config";
 import type { ResponseItem } from "openai/resources/responses/responses";
 
-// Log imports completed
-debug("Imports starting");
-
 import App from "./app";
-import { runSinglePass } from "./cli_singlepass";
+import { runSinglePass } from "./cli-singlepass";
 import { AgentLoop } from "./utils/agent/agent-loop";
-import { initLogger } from "./utils/agent/log";
 import { ReviewDecision } from "./utils/agent/review";
 import { AutoApprovalMode } from "./utils/auto-approval-mode";
+import { checkForUpdates } from "./utils/check-updates";
 import {
+  getApiKey,
   loadConfig,
   PRETTY_PRINT,
   INSTRUCTIONS_FILEPATH,
 } from "./utils/config";
 import { createInputItem } from "./utils/input-utils";
-import {
-  isModelSupportedForResponses,
-  preloadModels,
-} from "./utils/model-utils.js";
+import { initLogger } from "./utils/logger/log";
+import { isModelSupportedForResponses } from "./utils/model-utils.js";
 import { parseToolCall } from "./utils/parsers";
 import { onExit, setInkRenderer } from "./utils/terminal";
 import chalk from "chalk";
@@ -55,21 +36,14 @@ import meow from "meow";
 import path from "path";
 import React from "react";
 
-// Log that all modules have been imported
-debug("All imports completed");
-
 // Call this early so `tail -F "$TMPDIR/oai-codex/codex-cli-latest.log"` works
 // immediately. This must be run with DEBUG=1 for logging to work.
 initLogger();
-debug("Logger initialized");
 
 // TODO: migrate to new versions of quiet mode
 //
 //     -q, --quiet    Non-interactive quiet mode that only prints final message
 //     -j, --json     Non-interactive JSON output mode that prints JSON messages
-
-// Log command line argument parsing
-debug("Parsing CLI arguments");
 
 const cli = meow(
   `
@@ -78,13 +52,17 @@ const cli = meow(
     $ codex completion <bash|zsh|fish>
 
   Options
-    -h, --help                 Show usage and exit
-    -m, --model <model>        Model to use for completions (default: o4-mini)
-    -i, --image <path>         Path(s) to image files to include as input
-    -v, --view <rollout>       Inspect a previously saved rollout instead of starting a session
-    -q, --quiet                Non-interactive mode that only prints the assistant's final output
-    -c, --config               Open the instructions file in your editor
-    -a, --approval-mode <mode> Override the approval policy: 'suggest', 'auto-edit', or 'full-auto'
+    --version                       Print version and exit
+
+    -h, --help                      Show usage and exit
+    -m, --model <model>             Model to use for completions (default: o4-mini)
+    -p, --provider <provider>       Provider to use for completions (default: openai)
+    -i, --image <path>              Path(s) to image files to include as input
+    -v, --view <rollout>            Inspect a previously saved rollout instead of starting a session
+    -q, --quiet                     Non-interactive mode that only prints the assistant's final output
+    -c, --config                    Open the instructions file in your editor
+    -w, --writable-root <path>      Writable folder for sandbox in full-auto mode (can be specified multiple times)
+    -a, --approval-mode <mode>      Override the approval policy: 'suggest', 'auto-edit', or 'full-auto'
 
     --auto-edit                Automatically approve file edits; still prompt for commands
     --full-auto                Automatically approve edits and commands when executed in the sandbox
@@ -92,6 +70,13 @@ const cli = meow(
     --no-project-doc           Do not automatically include the repository's 'codex.md'
     --project-doc <file>       Include an additional markdown file at <file> as context
     --full-stdout              Do not truncate stdout/stderr from command outputs
+    --notify                   Enable desktop notifications for responses
+
+    --disable-response-storage Disable server‑side response storage (sends the
+                               full conversation context with every request)
+
+    --flex-mode               Use "flex-mode" processing mode for the request (only supported
+                              with models o3 and o4-mini)
 
   Dangerous options
     --dangerously-auto-approve-everything
@@ -114,8 +99,10 @@ const cli = meow(
     flags: {
       // misc
       help: { type: "boolean", aliases: ["h"] },
+      version: { type: "boolean", description: "Print version and exit" },
       view: { type: "string" },
       model: { type: "string", aliases: ["m"] },
+      provider: { type: "string", aliases: ["p"] },
       image: { type: "string", isMultiple: true, aliases: ["i"] },
       quiet: {
         type: "boolean",
@@ -145,21 +132,44 @@ const cli = meow(
         type: "string",
         aliases: ["a"],
         description:
-          "Determine the approval mode for Nova Codex (default: suggest) Values: suggest, auto-edit, full-auto",
+          "Determine the approval mode for Codex (default: suggest) Values: suggest, auto-edit, full-auto",
+      },
+      writableRoot: {
+        type: "string",
+        isMultiple: true,
+        aliases: ["w"],
+        description:
+          "Writable folder for sandbox in full-auto mode (can be specified multiple times)",
       },
       noProjectDoc: {
         type: "boolean",
-        description: "Disable automatic inclusion of project‑level codex.md",
+        description: "Disable automatic inclusion of project-level codex.md",
       },
       projectDoc: {
         type: "string",
         description: "Path to a markdown file to include as project doc",
+      },
+      flexMode: {
+        type: "boolean",
+        description:
+          "Enable the flex-mode service tier (only supported by models o3 and o4-mini)",
       },
       fullStdout: {
         type: "boolean",
         description:
           "Disable truncation of command stdout/stderr messages (show everything)",
         aliases: ["no-truncate"],
+      },
+      // Notification
+      notify: {
+        type: "boolean",
+        description: "Enable desktop notifications for responses",
+      },
+
+      disableResponseStorage: {
+        type: "boolean",
+        description:
+          "Disable server-side response storage (sends full conversation context with every request)",
       },
 
       // Experimental mode where whole directory is loaded in context and model is requested
@@ -174,11 +184,8 @@ const cli = meow(
   },
 );
 
-debug("CLI arguments parsed", { input: cli.input, flags: cli.flags });
-
 // Handle 'completion' subcommand before any prompting or API calls
 if (cli.input[0] === "completion") {
-  debug("Handling completion subcommand", { shell: cli.input[1] });
   const shell = cli.input[1] || "bash";
   const scripts: Record<string, string> = {
     bash: `# bash completion for codex
@@ -196,7 +203,7 @@ _codex() {
 }
 _codex`,
     fish: `# fish completion for codex
-complete -c codex -a '(_fish_complete_path)' -d 'file path'`,
+complete -c codex -a '(__fish_complete_path)' -d 'file path'`,
   };
   const script = scripts[shell];
   if (!script) {
@@ -208,26 +215,23 @@ complete -c codex -a '(_fish_complete_path)' -d 'file path'`,
   console.log(script);
   process.exit(0);
 }
-// Show help if requested
+
+// For --help, show help and exit.
 if (cli.flags.help) {
-  debug("Help flag detected, showing help");
   cli.showHelp();
 }
 
-// Handle config flag: open instructions file in editor and exit
+// For --config, open custom instructions file in editor and exit.
 if (cli.flags.config) {
-  debug("Config flag detected, opening instructions file");
-  // Ensure configuration and instructions file exist
   try {
-    loadConfig();
-  } catch (err) {
+    loadConfig(); // Ensures the file is created if it doesn't already exit.
+  } catch {
     // ignore errors
-    debug("Error loading config", err);
   }
+
   const filePath = INSTRUCTIONS_FILEPATH;
   const editor =
     process.env["EDITOR"] || (process.platform === "win32" ? "notepad" : "vi");
-  debug("Opening editor", { editor, filePath });
   spawnSync(editor, [filePath], { stdio: "inherit" });
   process.exit(0);
 }
@@ -235,159 +239,158 @@ if (cli.flags.config) {
 // ---------------------------------------------------------------------------
 // API key handling
 // ---------------------------------------------------------------------------
-debug("Checking API key");
 
-const apiKey = process.env["OPENAI_API_KEY"];
+const fullContextMode = Boolean(cli.flags.fullContext);
+let config = loadConfig(undefined, undefined, {
+  cwd: process.cwd(),
+  disableProjectDoc: Boolean(cli.flags.noProjectDoc),
+  projectDocPath: cli.flags.projectDoc,
+  isFullContext: fullContextMode,
+});
 
-if (!apiKey) {
-  debug("Missing OpenAI API key");
+const prompt = cli.input[0];
+const model = cli.flags.model ?? config.model;
+const imagePaths = cli.flags.image;
+const provider = cli.flags.provider ?? config.provider ?? "openai";
+const apiKey = getApiKey(provider);
+
+// Set of providers that don't require API keys
+const NO_API_KEY_REQUIRED = new Set(["ollama"]);
+
+// Skip API key validation for providers that don't require an API key
+if (!apiKey && !NO_API_KEY_REQUIRED.has(provider.toLowerCase())) {
   // eslint-disable-next-line no-console
   console.error(
-    `\n${chalk.red("Missing OpenAI API key.")}\n\n` +
-      `Set the environment variable ${chalk.bold("OPENAI_API_KEY")} ` +
+    `\n${chalk.red(`Missing ${provider} API key.`)}\n\n` +
+      `Set the environment variable ${chalk.bold(
+        `${provider.toUpperCase()}_API_KEY`,
+      )} ` +
       `and re-run this command.\n` +
-      `You can create a key here: ${chalk.bold(
-        chalk.underline("https://platform.openai.com/account/api-keys"),
-      )}\n`,
+      `${
+        provider.toLowerCase() === "openai"
+          ? `You can create a key here: ${chalk.bold(
+              chalk.underline("https://platform.openai.com/account/api-keys"),
+            )}\n`
+          : provider.toLowerCase() === "gemini"
+          ? `You can create a ${chalk.bold(
+              `${provider.toUpperCase()}_API_KEY`,
+            )} ` + `in the ${chalk.bold(`Google AI Studio`)}.\n`
+          : `You can create a ${chalk.bold(
+              `${provider.toUpperCase()}_API_KEY`,
+            )} ` + `in the ${chalk.bold(`${provider}`)} dashboard.\n`
+      }`,
   );
   process.exit(1);
 }
-
-debug("Loading configuration");
-const fullContextMode = Boolean(cli.flags.fullContext);
-let config: AppConfig;
-try {
-  config = loadConfig(undefined, undefined, {
-    cwd: process.cwd(),
-    disableProjectDoc: Boolean(cli.flags.noProjectDoc),
-    projectDocPath: cli.flags.projectDoc as string | undefined,
-    isFullContext: fullContextMode,
-  });
-  debug("Configuration loaded", { 
-    model: config.model, 
-    fullContext: fullContextMode,
-    cwd: process.cwd() 
-  });
-} catch (err) {
-  debug("Error loading configuration", err);
-  console.error("Failed to load configuration:", err);
-  process.exit(1);
-}
-
-const prompt = cli.input[0];
-const model = cli.flags.model;
-const imagePaths = cli.flags.image as Array<string> | undefined;
-
-debug("Processing command input", { 
-  prompt,
-  model: model || "(using default)",
-  hasImages: imagePaths ? imagePaths.length > 0 : false
-});
 
 config = {
   apiKey,
   ...config,
   model: model ?? config.model,
+  notify: Boolean(cli.flags.notify),
+  flexMode: Boolean(cli.flags.flexMode),
+  provider,
+  disableResponseStorage:
+    cli.flags.disableResponseStorage !== undefined
+      ? Boolean(cli.flags.disableResponseStorage)
+      : config.disableResponseStorage,
 };
 
-debug("Checking if model is supported", { model: config.model });
+// Check for updates after loading config. This is important because we write state file in
+// the config dir.
 try {
-  if (!(await isModelSupportedForResponses(config.model))) {
-    debug("Model not supported", { model: config.model });
+  await checkForUpdates();
+} catch {
+  // ignore
+}
+
+// For --flex-mode, validate and exit if incorrect.
+if (cli.flags.flexMode) {
+  const allowedFlexModels = new Set(["o3", "o4-mini"]);
+  if (!allowedFlexModels.has(config.model)) {
     // eslint-disable-next-line no-console
     console.error(
-      `The model "${config.model}" does not appear in the list of models ` +
-        `available to your account. Double‑check the spelling (use\n` +
-        `  openai models list\n` +
-        `to see the full list) or choose another model with the --model flag.`,
+      `The --flex-mode option is only supported when using the 'o3' or 'o4-mini' models. ` +
+        `Current model: '${config.model}'.`,
     );
     process.exit(1);
   }
-  debug("Model is supported");
-} catch (err) {
-  debug("Error checking model support", err);
-  console.error("Failed to check model support:", err);
-  process.exit(1);
+}
+
+if (
+  !(await isModelSupportedForResponses(provider, config.model)) &&
+  (!provider || provider.toLowerCase() === "openai")
+) {
+  // eslint-disable-next-line no-console
+  console.error(
+    `The model "${config.model}" does not appear in the list of models ` +
+      `available to your account. Double-check the spelling (use\n` +
+      `  openai models list\n` +
+      `to see the full list) or choose another model with the --model flag.`,
+  );
+  //process.exit(1);
 }
 
 let rollout: AppRollout | undefined;
 
+// For --view, optionally load an existing rollout from disk, display it and exit.
 if (cli.flags.view) {
-  debug("View flag detected, loading rollout");
   const viewPath = cli.flags.view;
   const absolutePath = path.isAbsolute(viewPath)
     ? viewPath
     : path.join(process.cwd(), viewPath);
-  debug("Loading rollout from path", { absolutePath });
   try {
     const content = fs.readFileSync(absolutePath, "utf-8");
     rollout = JSON.parse(content) as AppRollout;
-    debug("Rollout loaded successfully");
   } catch (error) {
-    debug("Error reading rollout file", error);
     // eslint-disable-next-line no-console
     console.error("Error reading rollout file:", error);
     process.exit(1);
   }
 }
 
-// If we are running in --fullcontext mode, do that and exit.
+// For --fullcontext, run the separate cli entrypoint and exit.
 if (fullContextMode) {
-  debug("Running in full context mode");
-  try {
-    await runSinglePass({
-      originalPrompt: prompt,
-      config,
-      rootPath: process.cwd(),
-    });
-    debug("Single pass completed successfully");
-  } catch (err) {
-    debug("Error in single pass mode", err);
-    console.error("Error in full context mode:", err);
-  }
+  await runSinglePass({
+    originalPrompt: prompt,
+    config,
+    rootPath: process.cwd(),
+  });
   onExit();
   process.exit(0);
 }
 
-// If we are running in --quiet mode, do that and exit.
-const quietMode = Boolean(cli.flags.quiet);
-const autoApproveEverything = Boolean(
-  cli.flags.dangerouslyAutoApproveEverything,
-);
-const fullStdout = Boolean(cli.flags.fullStdout);
+// Ensure that all values in additionalWritableRoots are absolute paths.
+const additionalWritableRoots: ReadonlyArray<string> = (
+  cli.flags.writableRoot ?? []
+).map((p) => path.resolve(p));
 
-if (quietMode) {
-  debug("Running in quiet mode");
+// For --quiet, run the cli without user interactions and exit.
+if (cli.flags.quiet) {
   process.env["CODEX_QUIET_MODE"] = "1";
   if (!prompt || prompt.trim() === "") {
-    debug("Prompt missing in quiet mode");
     // eslint-disable-next-line no-console
     console.error(
       'Quiet mode requires a prompt string, e.g.,: codex -q "Fix bug #123 in the foobar project"',
     );
     process.exit(1);
   }
-  
-  debug("Starting quiet mode execution", {
+
+  // Determine approval policy for quiet mode based on flags
+  const quietApprovalPolicy: ApprovalPolicy =
+    cli.flags.fullAuto || cli.flags.approvalMode === "full-auto"
+      ? AutoApprovalMode.FULL_AUTO
+      : cli.flags.autoEdit || cli.flags.approvalMode === "auto-edit"
+      ? AutoApprovalMode.AUTO_EDIT
+      : config.approvalMode || AutoApprovalMode.SUGGEST;
+
+  await runQuietMode({
     prompt,
-    approvalPolicy: autoApproveEverything ? "AUTO_APPROVE_EVERYTHING" : "SUGGEST"
+    imagePaths: imagePaths || [],
+    approvalPolicy: quietApprovalPolicy,
+    additionalWritableRoots,
+    config,
   });
-  
-  try {
-    await runQuietMode({
-      prompt: prompt as string,
-      imagePaths: imagePaths || [],
-      approvalPolicy: autoApproveEverything
-        ? AutoApprovalMode.FULL_AUTO
-        : AutoApprovalMode.SUGGEST,
-      config,
-    });
-    debug("Quiet mode completed successfully");
-  } catch (err) {
-    debug("Error in quiet mode", err);
-    console.error("Error in quiet mode execution:", err);
-  }
-  
   onExit();
   process.exit(0);
 }
@@ -402,49 +405,31 @@ if (quietMode) {
 //    it is more dangerous than --fullAuto we deliberately give it lower
 //    priority so a user specifying both flags still gets the safer behaviour.
 // 3. --autoEdit – automatically approve edits, but prompt for commands.
-// 4. Default – suggest mode (prompt for everything).
+// 4. config.approvalMode - use the approvalMode setting from ~/.codex/config.json.
+// 5. Default – suggest mode (prompt for everything).
 
-debug("Determining approval policy");
 const approvalPolicy: ApprovalPolicy =
   cli.flags.fullAuto || cli.flags.approvalMode === "full-auto"
     ? AutoApprovalMode.FULL_AUTO
     : cli.flags.autoEdit || cli.flags.approvalMode === "auto-edit"
     ? AutoApprovalMode.AUTO_EDIT
-    : AutoApprovalMode.SUGGEST;
-debug("Approval policy set", { policy: approvalPolicy });
+    : config.approvalMode || AutoApprovalMode.SUGGEST;
 
-debug("Preloading models");
-try {
-  preloadModels();
-  debug("Models preloaded successfully");
-} catch (err) {
-  debug("Error preloading models", err);
-  console.error("Failed to preload models:", err);
-}
-
-debug("Rendering main application");
-try {
-  const instance = render(
-    <App
-      prompt={prompt}
-      config={config}
-      rollout={rollout}
-      imagePaths={imagePaths}
-      approvalPolicy={approvalPolicy}
-      fullStdout={fullStdout}
-    />,
-    {
-      patchConsole: process.env["DEBUG"] ? false : true,
-    },
-  );
-  debug("Application rendered successfully");
-  setInkRenderer(instance);
-  debug("Ink renderer set");
-} catch (err) {
-  debug("Error rendering application", err);
-  console.error("Failed to render application:", err);
-  process.exit(1);
-}
+const instance = render(
+  <App
+    prompt={prompt}
+    config={config}
+    rollout={rollout}
+    imagePaths={imagePaths}
+    approvalPolicy={approvalPolicy}
+    additionalWritableRoots={additionalWritableRoots}
+    fullStdout={Boolean(cli.flags.fullStdout)}
+  />,
+  {
+    patchConsole: process.env["DEBUG"] ? false : true,
+  },
+);
+setInkRenderer(instance);
 
 function formatResponseItemForQuietMode(item: ResponseItem): string {
   if (!PRETTY_PRINT) {
@@ -499,91 +484,50 @@ async function runQuietMode({
   prompt,
   imagePaths,
   approvalPolicy,
+  additionalWritableRoots,
   config,
 }: {
   prompt: string;
   imagePaths: Array<string>;
   approvalPolicy: ApprovalPolicy;
+  additionalWritableRoots: ReadonlyArray<string>;
   config: AppConfig;
 }): Promise<void> {
-  debug("Initializing agent loop for quiet mode");
-  try {
-    const agent = new AgentLoop({
-      model: config.model,
-      config: config,
-      instructions: config.instructions,
-      approvalPolicy,
-      onItem: (() => {
-        let currentMessageId: string | null = null;
-        let accumulatedContent: string[] = [];
-        return (item: ResponseItem) => {
-          if (item.type === 'message' && item.role === 'assistant') {
-            if (item.id !== currentMessageId) {
-              currentMessageId = item.id;
-              accumulatedContent = [];
-            }
-            for (const c of item.content) {
-              if (c.type === 'output_text') {
-                accumulatedContent.push(c.text);
-              }
-            }
-            if ((item as any).status === 'completed') {
-              // Prefer the longest content: either accumulated or final event's content
-              const finalText = item.content
-                .filter((c) => c.type === 'output_text')
-                .map((c) => c.text)
-                .join('');
-              const output =
-                finalText.length > accumulatedContent.join('').length
-                  ? finalText
-                  : accumulatedContent.join('');
-              const fullItem = {
-                ...item,
-                content: [
-                  {
-                    type: 'output_text' as const,
-                    text: output,
-                    annotations: [] as any[],
-                  },
-                ],
-              };
-              // eslint-disable-next-line no-console
-              console.log(formatResponseItemForQuietMode(fullItem));
-              currentMessageId = null;
-              accumulatedContent = [];
-            }
-          } else {
-            // eslint-disable-next-line no-console
-            console.log(formatResponseItemForQuietMode(item));
-          }
-        };
-      })(),
-      onLoading: () => {
-        /* intentionally ignored in quiet mode */
-      },
-      getCommandConfirmation: (
-        _command: Array<string>,
-      ): Promise<CommandConfirmation> => {
-        return Promise.resolve({ review: ReviewDecision.NO_CONTINUE });
-      },
-      onLastResponseId: () => {
-        /* intentionally ignored in quiet mode */
-      },
-    });
+  const agent = new AgentLoop({
+    model: config.model,
+    config: config,
+    instructions: config.instructions,
+    provider: config.provider,
+    approvalPolicy,
+    additionalWritableRoots,
+    disableResponseStorage: config.disableResponseStorage,
+    onItem: (item: ResponseItem) => {
+      // eslint-disable-next-line no-console
+      console.log(formatResponseItemForQuietMode(item));
+    },
+    onLoading: () => {
+      /* intentionally ignored in quiet mode */
+    },
+    getCommandConfirmation: (
+      _command: Array<string>,
+    ): Promise<CommandConfirmation> => {
+      // In quiet mode, default to NO_CONTINUE, except when in full-auto mode
+      const reviewDecision =
+        approvalPolicy === AutoApprovalMode.FULL_AUTO
+          ? ReviewDecision.YES
+          : ReviewDecision.NO_CONTINUE;
+      return Promise.resolve({ review: reviewDecision });
+    },
+    onLastResponseId: () => {
+      /* intentionally ignored in quiet mode */
+    },
+  });
 
-    debug("Creating input item");
-    const inputItem = await createInputItem(prompt, imagePaths);
-    debug("Starting agent run");
-    await agent.run([inputItem]);
-    debug("Agent run completed");
-  } catch (err) {
-    debug("Error in agent loop execution", err);
-    console.error("Error executing agent:", err);
-  }
+  const inputItem = await createInputItem(prompt, imagePaths);
+  await agent.run([inputItem]);
 }
 
 const exit = () => {
-  debug("Exit signal received, cleaning up");
   onExit();
   process.exit(0);
 };
@@ -593,27 +537,23 @@ process.on("SIGQUIT", exit);
 process.on("SIGTERM", exit);
 
 // ---------------------------------------------------------------------------
-// Fallback for Ctrl‑C when stdin is in raw‑mode
+// Fallback for Ctrl-C when stdin is in raw-mode
 // ---------------------------------------------------------------------------
 
 if (process.stdin.isTTY) {
-  debug("TTY detected, setting up Ctrl-C handler");
   // Ensure we do not leave the terminal in raw mode if the user presses
-  // Ctrl‑C while some other component has focus and Ink is intercepting
-  // input. Node does *not* emit a SIGINT in raw‑mode, so we listen for the
+  // Ctrl-C while some other component has focus and Ink is intercepting
+  // input. Node does *not* emit a SIGINT in raw-mode, so we listen for the
   // corresponding byte (0x03) ourselves and trigger a graceful shutdown.
   const onRawData = (data: Buffer | string): void => {
     const str = Buffer.isBuffer(data) ? data.toString("utf8") : data;
     if (str === "\u0003") {
-      debug("Ctrl-C detected in raw mode");
       exit();
     }
   };
   process.stdin.on("data", onRawData);
 }
 
-// Ensure terminal clean‑up always runs, even when other code calls
+// Ensure terminal clean-up always runs, even when other code calls
 // `process.exit()` directly.
 process.once("exit", onExit);
-
-debug("CLI initialization complete");

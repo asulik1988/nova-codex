@@ -5,12 +5,12 @@ import type { ApplyPatchCommand, ApprovalPolicy } from "../../approvals.js";
 import type { ResponseInputItem } from "openai/resources/responses/responses.mjs";
 
 import { exec, execApplyPatch } from "./exec.js";
-import { isLoggingEnabled, log } from "./log.js";
 import { ReviewDecision } from "./review.js";
 import { FullAutoErrorMode } from "../auto-approval-mode.js";
 import { SandboxType } from "./sandbox/interface.js";
 import { canAutoApprove } from "../../approvals.js";
 import { formatCommandForDisplay } from "../../format-command.js";
+import { isLoggingEnabled, log } from "../logger/log.js";
 import { access } from "fs/promises";
 
 // ---------------------------------------------------------------------------
@@ -74,13 +74,14 @@ export async function handleExecCommand(
   args: ExecInput,
   config: AppConfig,
   policy: ApprovalPolicy,
+  additionalWritableRoots: ReadonlyArray<string>,
   getCommandConfirmation: (
     command: Array<string>,
     applyPatch: ApplyPatchCommand | undefined,
   ) => Promise<CommandConfirmation>,
   abortSignal?: AbortSignal,
 ): Promise<HandleExecCommandResult> {
-  const { cmd: command } = args;
+  const { cmd: command, workdir } = args;
 
   const key = deriveCommandKey(command);
 
@@ -91,6 +92,7 @@ export async function handleExecCommand(
       args,
       /* applyPatch */ undefined,
       /* runInSandbox */ false,
+      additionalWritableRoots,
       abortSignal,
     ).then(convertSummaryToResult);
   }
@@ -101,7 +103,7 @@ export async function handleExecCommand(
   // working directory so that edits are constrained to the project root.  If
   // the caller wishes to broaden or restrict the set it can be made
   // configurable in the future.
-  const safety = canAutoApprove(command, policy, [process.cwd()]);
+  const safety = canAutoApprove(command, workdir, policy, [process.cwd()]);
 
   let runInSandbox: boolean;
   switch (safety.type) {
@@ -138,10 +140,11 @@ export async function handleExecCommand(
     args,
     applyPatch,
     runInSandbox,
+    additionalWritableRoots,
     abortSignal,
   );
   // If the operation was aborted in the meantime, propagate the cancellation
-  // upward by returning an empty (no‑op) result so that the agent loop will
+  // upward by returning an empty (no-op) result so that the agent loop will
   // exit cleanly without emitting spurious output.
   if (abortSignal?.aborted) {
     return {
@@ -170,7 +173,13 @@ export async function handleExecCommand(
     } else {
       // The user has approved the command, so we will run it outside of the
       // sandbox.
-      const summary = await execCommand(args, applyPatch, false, abortSignal);
+      const summary = await execCommand(
+        args,
+        applyPatch,
+        false,
+        additionalWritableRoots,
+        abortSignal,
+      );
       return convertSummaryToResult(summary);
     }
   } else {
@@ -202,6 +211,7 @@ async function execCommand(
   execInput: ExecInput,
   applyPatchCommand: ApplyPatchCommand | undefined,
   runInSandbox: boolean,
+  additionalWritableRoots: ReadonlyArray<string>,
   abortSignal?: AbortSignal,
 ): Promise<ExecCommandSummary> {
   let { workdir } = execInput;
@@ -213,23 +223,22 @@ async function execCommand(
       workdir = process.cwd();
     }
   }
-  if (isLoggingEnabled()) {
-    if (applyPatchCommand != null) {
-      log("EXEC running apply_patch command");
-    } else {
-      const { cmd, timeoutInMillis } = execInput;
-      // Seconds are a bit easier to read in log messages and most timeouts
-      // are specified as multiples of 1000, anyway.
-      const timeout =
-        timeoutInMillis != null
-          ? Math.round(timeoutInMillis / 1000).toString()
-          : "undefined";
-      log(
-        `EXEC running \`${formatCommandForDisplay(
-          cmd,
-        )}\` in workdir=${workdir} with timeout=${timeout}s`,
-      );
-    }
+
+  if (applyPatchCommand != null) {
+    log("EXEC running apply_patch command");
+  } else if (isLoggingEnabled()) {
+    const { cmd, timeoutInMillis } = execInput;
+    // Seconds are a bit easier to read in log messages and most timeouts
+    // are specified as multiples of 1000, anyway.
+    const timeout =
+      timeoutInMillis != null
+        ? Math.round(timeoutInMillis / 1000).toString()
+        : "undefined";
+    log(
+      `EXEC running \`${formatCommandForDisplay(
+        cmd,
+      )}\` in workdir=${workdir} with timeout=${timeout}s`,
+    );
   }
 
   // Note execApplyPatch() and exec() are coded defensively and should not
@@ -238,8 +247,12 @@ async function execCommand(
   const start = Date.now();
   const execResult =
     applyPatchCommand != null
-      ? execApplyPatch(applyPatchCommand.patch)
-      : await exec(execInput, await getSandbox(runInSandbox), abortSignal);
+      ? execApplyPatch(applyPatchCommand.patch, workdir)
+      : await exec(
+          { ...execInput, additionalWritableRoots },
+          await getSandbox(runInSandbox),
+          abortSignal,
+        );
   const duration = Date.now() - start;
   const { stdout, stderr, exitCode } = execResult;
 
@@ -309,7 +322,13 @@ async function askUserPermission(
     alwaysApprovedCommands.add(key);
   }
 
-  // Any decision other than an affirmative (YES / ALWAYS) aborts execution.
+  // Handle EXPLAIN decision by returning null to continue with the normal flow
+  // but with a flag to indicate that an explanation was requested
+  if (decision === ReviewDecision.EXPLAIN) {
+    return null;
+  }
+
+  // Any decision other than an affirmative (YES / ALWAYS) or EXPLAIN aborts execution.
   if (decision !== ReviewDecision.YES && decision !== ReviewDecision.ALWAYS) {
     const note =
       decision === ReviewDecision.NO_CONTINUE

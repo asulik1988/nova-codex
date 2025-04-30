@@ -9,10 +9,12 @@ export interface TerminalHeaderProps {
   version: string;
   PWD: string;
   model: string;
+  provider?: string;
   approvalPolicy: string;
   colorsByPolicy: Record<string, string | undefined>;
   agent?: AgentLoop;
   initialImagePaths?: Array<string>;
+  flexModeEnabled?: boolean;
 }
 
 const TerminalHeader: React.FC<TerminalHeaderProps> = ({
@@ -20,24 +22,27 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
   version,
   PWD,
   model,
+  provider = "openai",
   approvalPolicy,
   colorsByPolicy,
   agent,
   initialImagePaths,
+  flexModeEnabled = false,
 }) => {
   return (
     <>
       {terminalRows < 10 ? (
         // Compact header for small terminal windows
         <Text>
-          ● Nova Codex v{version} – {PWD} – {model} –{" "}
+          ● Codex v{version} - {PWD} - {model} ({provider}) -{" "}
           <Text color={colorsByPolicy[approvalPolicy]}>{approvalPolicy}</Text>
+          {flexModeEnabled ? " - flex-mode" : ""}
         </Text>
       ) : (
         <>
           <Box borderStyle="round" paddingX={1} width={64}>
             <Text>
-              ● <Text bold>Nova Codex</Text>{" "}
+              ● OpenAI <Text bold>Codex</Text>{" "}
               <Text dimColor>
                 (research preview) <Text color="blueBright">v{version}</Text>
               </Text>
@@ -63,11 +68,21 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
               <Text color="blueBright">↳</Text> model: <Text bold>{model}</Text>
             </Text>
             <Text dimColor>
+              <Text color="blueBright">↳</Text> provider:{" "}
+              <Text bold>{provider}</Text>
+            </Text>
+            <Text dimColor>
               <Text color="blueBright">↳</Text> approval:{" "}
               <Text bold color={colorsByPolicy[approvalPolicy]} dimColor>
                 {approvalPolicy}
               </Text>
             </Text>
+            {flexModeEnabled && (
+              <Text dimColor>
+                <Text color="blueBright">↳</Text> flex-mode:{" "}
+                <Text bold>enabled</Text>
+              </Text>
+            )}
             {initialImagePaths?.map((img, idx) => (
               <Text key={img ?? idx} color="gray">
                 <Text color="blueBright">↳</Text> image:{" "}

@@ -22,6 +22,7 @@ type Props = {
   imagePaths?: Array<string>;
   rollout?: AppRollout;
   approvalPolicy: ApprovalPolicy;
+  additionalWritableRoots: ReadonlyArray<string>;
   fullStdout: boolean;
 };
 
@@ -31,6 +32,7 @@ export default function App({
   rollout,
   imagePaths,
   approvalPolicy,
+  additionalWritableRoots,
   fullStdout,
 }: Props): JSX.Element {
   const app = useApp();
@@ -56,7 +58,7 @@ export default function App({
       <Box flexDirection="column">
         <Box borderStyle="round" paddingX={1} width={64}>
           <Text>
-            ● <Text bold>Nova Codex</Text>{" "}
+            ● OpenAI <Text bold>Codex</Text>{" "}
             <Text dimColor>
               (research preview) <Text color="blueBright">v{CLI_VERSION}</Text>
             </Text>
@@ -97,6 +99,7 @@ export default function App({
       prompt={prompt}
       imagePaths={imagePaths}
       approvalPolicy={approvalPolicy}
+      additionalWritableRoots={additionalWritableRoots}
       fullStdout={fullStdout}
     />
   );

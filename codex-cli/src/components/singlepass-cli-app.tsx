@@ -5,7 +5,7 @@ import type { FileOperation } from "../utils/singlepass/file_ops";
 
 import Spinner from "./vendor/ink-spinner"; // Third‑party / vendor components
 import TextInput from "./vendor/ink-text-input";
-import { OPENAI_TIMEOUT_MS, OPENAI_BASE_URL } from "../utils/config";
+import { OPENAI_TIMEOUT_MS, getBaseUrl, getApiKey } from "../utils/config";
 import {
   generateDiffSummary,
   generateEditSummary,
@@ -394,12 +394,13 @@ export function SinglePassApp({
       });
 
       const openai = new OpenAI({
-        apiKey: config.apiKey ?? "",
-        baseURL: OPENAI_BASE_URL || undefined,
+        apiKey: getApiKey(config.provider),
+        baseURL: getBaseUrl(config.provider),
         timeout: OPENAI_TIMEOUT_MS,
       });
       const chatResp = await openai.beta.chat.completions.parse({
         model: config.model,
+        ...(config.flexMode ? { service_tier: "flex" } : {}),
         messages: [
           {
             role: "user",
@@ -586,7 +587,7 @@ export function SinglePassApp({
         <Box borderStyle="round" flexDirection="column" paddingX={1} width={80}>
           <Text>
             <Text bold color="magenta">
-              Nova <Text bold>Codex</Text>
+              OpenAI <Text bold>Codex</Text>
             </Text>{" "}
             <Text dimColor>(full context mode)</Text>
           </Text>

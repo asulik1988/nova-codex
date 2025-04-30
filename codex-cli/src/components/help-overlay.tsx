@@ -49,6 +49,19 @@ export default function HelpOverlay({
         <Text>
           <Text color="cyan">/clear</Text> – clear screen &amp; context
         </Text>
+        <Text>
+          <Text color="cyan">/clearhistory</Text> – clear command history
+        </Text>
+        <Text>
+          <Text color="cyan">/bug</Text> – generate a prefilled GitHub issue URL
+          with session log
+        </Text>
+        <Text>
+          <Text color="cyan">/diff</Text> – view working tree git diff
+        </Text>
+        <Text>
+          <Text color="cyan">/compact</Text> – condense context into a summary
+        </Text>
 
         <Box marginTop={1}>
           <Text bold dimColor>
@@ -78,7 +91,7 @@ export default function HelpOverlay({
           – interrupt current action
         </Text>
         <Text>
-          <Text color="yellow">Ctrl+C</Text> – quit Nova Codex
+          <Text color="yellow">Ctrl+C</Text> – quit Codex
         </Text>
       </Box>
 

@@ -8,19 +8,21 @@
 
 import type { FullAutoErrorMode } from "./auto-approval-mode.js";
 
-import { log, isLoggingEnabled } from "./agent/log.js";
 import { AutoApprovalMode } from "./auto-approval-mode.js";
+import { log } from "./logger/log.js";
+import { providers } from "./providers.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { load as loadYaml, dump as dumpYaml } from "js-yaml";
 import { homedir } from "os";
 import { dirname, join, extname, resolve as resolvePath } from "path";
+import { getBedrockAccessGatewayBaseUrl } from "./bedrock-access-gateway.js";
 
 export const DEFAULT_AGENTIC_MODEL = "o4-mini";
 export const DEFAULT_FULL_CONTEXT_MODEL = "gpt-4.1";
 export const DEFAULT_APPROVAL_MODE = AutoApprovalMode.SUGGEST;
 export const DEFAULT_INSTRUCTIONS = "";
 
-export const CONFIG_DIR = join(homedir(), ".neo");
+export const CONFIG_DIR = join(homedir(), ".codex");
 export const CONFIG_JSON_FILEPATH = join(CONFIG_DIR, "config.json");
 export const CONFIG_YAML_FILEPATH = join(CONFIG_DIR, "config.yaml");
 export const CONFIG_YML_FILEPATH = join(CONFIG_DIR, "config.yml");
@@ -35,24 +37,83 @@ export const OPENAI_TIMEOUT_MS =
   parseInt(process.env["OPENAI_TIMEOUT_MS"] || "0", 10) || undefined;
 export const OPENAI_BASE_URL = process.env["OPENAI_BASE_URL"] || "";
 export let OPENAI_API_KEY = process.env["OPENAI_API_KEY"] || "";
-export const AWS_REGION = process.env["AWS_REGION"] || process.env["AWS_DEFAULT_REGION"] || "us-east-1";
-export const AWS_ACCESS_KEY_ID = process.env["AWS_ACCESS_KEY_ID"] || "";
-export const AWS_SECRET_ACCESS_KEY = process.env["AWS_SECRET_ACCESS_KEY"] || "";
-export const AWS_SESSION_TOKEN = process.env["AWS_SESSION_TOKEN"] || "";
 
 export function setApiKey(apiKey: string): void {
   OPENAI_API_KEY = apiKey;
 }
 
-// Formatting (quiet mode-only).
-export const PRETTY_PRINT = Boolean(process.env["PRETTY_PRINT"] || "");
+export function getBaseUrl(provider: string = "openai"): string | undefined {
+  // Check for a PROVIDER-specific override: e.g. OPENAI_BASE_URL or OLLAMA_BASE_URL.
+  const envKey = `${provider.toUpperCase()}_BASE_URL`;
+  if (process.env[envKey]) {
+    return process.env[envKey];
+  }
+
+  // Get providers config from config file.
+  const config = loadConfig();
+  const providersConfig = config.providers ?? providers;
+  const providerInfo = providersConfig[provider.toLowerCase()];
+  if (providerInfo) {
+    // Special handling for AWS Bedrock to support region and gateway
+    if (provider.toLowerCase() === "bedrock") {
+      // Use the Bedrock Access Gateway, which throws if gateway ID isn't configured
+      return getBedrockAccessGatewayBaseUrl();
+    }
+    return providerInfo.baseURL;
+  }
+
+  // If the provider not found in the providers list and `OPENAI_BASE_URL` is set, use it.
+  if (OPENAI_BASE_URL !== "") {
+    return OPENAI_BASE_URL;
+  }
+
+  // We tried.
+  return undefined;
+}
+
+export function getApiKey(provider: string = "openai"): string | undefined {
+  const config = loadConfig();
+  const providersConfig = config.providers ?? providers;
+  const providerInfo = providersConfig[provider.toLowerCase()];
+  if (providerInfo) {
+    if (providerInfo.name === "Ollama") {
+      return process.env[providerInfo.envKey] ?? "dummy";
+    }
+    return process.env[providerInfo.envKey];
+  }
+
+  // Checking `PROVIDER_API_KEY feels more intuitive with a custom provider.
+  const customApiKey = process.env[`${provider.toUpperCase()}_API_KEY`];
+  if (customApiKey) {
+    return customApiKey;
+  }
+
+  // If the provider not found in the providers list and `OPENAI_API_KEY` is set, use it
+  if (OPENAI_API_KEY !== "") {
+    return OPENAI_API_KEY;
+  }
+
+  // We tried.
+  return undefined;
+}
 
 // Represents config as persisted in config.json.
 export type StoredConfig = {
   model?: string;
+  provider?: string;
   approvalMode?: AutoApprovalMode;
   fullAutoErrorMode?: FullAutoErrorMode;
   memory?: MemoryConfig;
+  /** Whether to enable desktop notifications for responses */
+  notify?: boolean;
+  /** Disable server-side response storage (send full transcript each request) */
+  disableResponseStorage?: boolean;
+  providers?: Record<string, { name: string; baseURL: string; envKey: string }>;
+  history?: {
+    maxSize?: number;
+    saveHistory?: boolean;
+    sensitivePatterns?: Array<string>;
+  };
 };
 
 // Minimal config written on first run.  An *empty* model string ensures that
@@ -71,18 +132,38 @@ export type MemoryConfig = {
 export type AppConfig = {
   apiKey?: string;
   model: string;
+  provider?: string;
   instructions: string;
+  approvalMode?: AutoApprovalMode;
   fullAutoErrorMode?: FullAutoErrorMode;
   memory?: MemoryConfig;
+  /** Whether to enable desktop notifications for responses */
+  notify?: boolean;
+
+  /** Disable server-side response storage (send full transcript each request) */
+  disableResponseStorage?: boolean;
+
+  /** Enable the "flex-mode" processing mode for supported models (o3, o4-mini) */
+  flexMode?: boolean;
+  providers?: Record<string, { name: string; baseURL: string; envKey: string }>;
+  history?: {
+    maxSize: number;
+    saveHistory: boolean;
+    sensitivePatterns: Array<string>;
+  };
 };
 
+// Formatting (quiet mode-only).
+export const PRETTY_PRINT = Boolean(process.env["PRETTY_PRINT"] || "");
+
 // ---------------------------------------------------------------------------
-// Project doc support (neo.md)
+// Project doc support (codex.md)
 // ---------------------------------------------------------------------------
 
 export const PROJECT_DOC_MAX_BYTES = 32 * 1024; // 32 kB
 
-const PROJECT_DOC_FILENAMES = ["neo.md", ".neo.md", "NEO.md", "codex.md"];
+const PROJECT_DOC_FILENAMES = ["codex.md", ".codex.md", "CODEX.md"];
+const PROJECT_DOC_SEPARATOR = "\n\n--- project-doc ---\n\n";
 
 export function discoverProjectDocPath(startDir: string): string | null {
   const cwd = resolvePath(startDir);
@@ -122,7 +203,7 @@ export function discoverProjectDocPath(startDir: string): string | null {
 }
 
 /**
- * Load the project documentation markdown (neo.md) if present. If the file
+ * Load the project documentation markdown (codex.md) if present. If the file
  * exceeds {@link PROJECT_DOC_MAX_BYTES} it will be truncated and a warning is
  * logged.
  *
@@ -136,7 +217,7 @@ export function loadProjectDoc(cwd: string, explicitPath?: string): string {
     filepath = resolvePath(cwd, explicitPath);
     if (!existsSync(filepath)) {
       // eslint-disable-next-line no-console
-      console.warn(`neo: project doc not found at ${filepath}`);
+      console.warn(`codex: project doc not found at ${filepath}`);
       filepath = null;
     }
   } else {
@@ -152,7 +233,7 @@ export function loadProjectDoc(cwd: string, explicitPath?: string): string {
     if (buf.byteLength > PROJECT_DOC_MAX_BYTES) {
       // eslint-disable-next-line no-console
       console.warn(
-        `neo: project doc '${filepath}' exceeds ${PROJECT_DOC_MAX_BYTES} bytes – truncating.`,
+        `codex: project doc '${filepath}' exceeds ${PROJECT_DOC_MAX_BYTES} bytes – truncating.`,
       );
     }
     return buf.slice(0, PROJECT_DOC_MAX_BYTES).toString("utf-8");
@@ -216,7 +297,7 @@ export const loadConfig = (
   // Project doc support.
   const shouldLoadProjectDoc =
     !options.disableProjectDoc &&
-    process.env["NEO_DISABLE_PROJECT_DOC"] !== "1";
+    process.env["CODEX_DISABLE_PROJECT_DOC"] !== "1";
 
   let projectDoc = "";
   let projectDocPath: string | null = null;
@@ -227,33 +308,17 @@ export const loadConfig = (
       ? resolvePath(cwd, options.projectDocPath)
       : discoverProjectDocPath(cwd);
     if (projectDocPath) {
-      if (isLoggingEnabled()) {
-        log(
-          `[neo] Loaded project doc from ${projectDocPath} (${projectDoc.length} bytes)`,
-        );
-      }
+      log(
+        `[codex] Loaded project doc from ${projectDocPath} (${projectDoc.length} bytes)`,
+      );
     } else {
-      if (isLoggingEnabled()) {
-        log(`[neo] No project doc found in ${cwd}`);
-      }
+      log(`[codex] No project doc found in ${cwd}`);
     }
   }
 
-  // Only include the project doc separator if both user instructions and project doc exist
-  const combinedInstructions = (() => {
-    const hasUserInstructions = userInstructions && userInstructions.trim() !== "";
-    const hasProjectDoc = projectDoc && projectDoc.trim() !== "";
-    
-    if (hasUserInstructions && hasProjectDoc) {
-      return `${userInstructions}\n\n--- project-doc ---\n\n${projectDoc}`;
-    } else if (hasUserInstructions) {
-      return userInstructions;
-    } else if (hasProjectDoc) {
-      return projectDoc;
-    } else {
-      return "";
-    }
-  })();
+  const combinedInstructions = [userInstructions, projectDoc]
+    .filter((s) => s && s.trim() !== "")
+    .join(PROJECT_DOC_SEPARATOR);
 
   // Treat empty string ("" or whitespace) as absence so we can fall back to
   // the latest DEFAULT_MODEL.
@@ -268,13 +333,17 @@ export const loadConfig = (
       (options.isFullContext
         ? DEFAULT_FULL_CONTEXT_MODEL
         : DEFAULT_AGENTIC_MODEL),
+    provider: storedConfig.provider,
     instructions: combinedInstructions,
+    notify: storedConfig.notify === true,
+    approvalMode: storedConfig.approvalMode,
+    disableResponseStorage: storedConfig.disableResponseStorage ?? false,
   };
 
   // -----------------------------------------------------------------------
   // First‑run bootstrap: if the configuration file (and/or its containing
   // directory) didn't exist we create them now so that users end up with a
-  // materialised ~/.neo/config.json file on first execution.  This mirrors
+  // materialised ~/.codex/config.json file on first execution.  This mirrors
   // what `saveConfig()` would do but without requiring callers to remember to
   // invoke it separately.
   //
@@ -295,7 +364,7 @@ export const loadConfig = (
       // Persist a minimal config – we include the `model` key but leave it as
       // an empty string so that `loadConfig()` treats it as "unset" and falls
       // back to whatever DEFAULT_MODEL is current at runtime.  This prevents
-      // pinning users to an old default after upgrading Neo.
+      // pinning users to an old default after upgrading Codex.
       const ext = extname(actualConfigPath).toLowerCase();
       if (ext === ".yaml" || ext === ".yml") {
         writeFileSync(actualConfigPath, dumpYaml(EMPTY_STORED_CONFIG), "utf-8");
@@ -314,7 +383,7 @@ export const loadConfig = (
     }
   } catch {
     // Silently ignore any errors – failure to persist the defaults shouldn't
-    // block the CLI from starting.  A future explicit `neo config` command
+    // block the CLI from starting.  A future explicit `codex config` command
     // or `saveConfig()` call can handle (re‑)writing later.
   }
 
@@ -328,6 +397,26 @@ export const loadConfig = (
   if (storedConfig.fullAutoErrorMode) {
     config.fullAutoErrorMode = storedConfig.fullAutoErrorMode;
   }
+  // Notification setting: enable desktop notifications when set in config
+  config.notify = storedConfig.notify === true;
+
+  // Add default history config if not provided
+  if (storedConfig.history !== undefined) {
+    config.history = {
+      maxSize: storedConfig.history.maxSize ?? 1000,
+      saveHistory: storedConfig.history.saveHistory ?? true,
+      sensitivePatterns: storedConfig.history.sensitivePatterns ?? [],
+    };
+  } else {
+    config.history = {
+      maxSize: 1000,
+      saveHistory: true,
+      sensitivePatterns: [],
+    };
+  }
+
+  // Merge default providers with user configured providers in the config.
+  config.providers = { ...providers, ...storedConfig.providers };
 
   return config;
 };
@@ -357,15 +446,32 @@ export const saveConfig = (
   }
 
   const ext = extname(targetPath).toLowerCase();
-  if (ext === ".yaml" || ext === ".yml") {
-    writeFileSync(targetPath, dumpYaml({ model: config.model }), "utf-8");
-  } else {
-    writeFileSync(
-      targetPath,
-      JSON.stringify({ model: config.model }, null, 2),
-      "utf-8",
-    );
+  // Create the config object to save
+  const configToSave: StoredConfig = {
+    model: config.model,
+    provider: config.provider,
+    providers: config.providers,
+    approvalMode: config.approvalMode,
+  };
+
+  // Add history settings if they exist
+  if (config.history) {
+    configToSave.history = {
+      maxSize: config.history.maxSize,
+      saveHistory: config.history.saveHistory,
+      sensitivePatterns: config.history.sensitivePatterns,
+    };
   }
 
-  writeFileSync(instructionsPath, config.instructions, "utf-8");
+  if (ext === ".yaml" || ext === ".yml") {
+    writeFileSync(targetPath, dumpYaml(configToSave), "utf-8");
+  } else {
+    writeFileSync(targetPath, JSON.stringify(configToSave, null, 2), "utf-8");
+  }
+
+  // Take everything before the first PROJECT_DOC_SEPARATOR (or the whole string if none).
+  const [userInstructions = ""] = config.instructions.split(
+    PROJECT_DOC_SEPARATOR,
+  );
+  writeFileSync(instructionsPath, userInstructions, "utf-8");
 };

@@ -71,22 +71,18 @@ export type ApprovalPolicy =
  */
 export function canAutoApprove(
   command: ReadonlyArray<string>,
+  workdir: string | undefined,
   policy: ApprovalPolicy,
   writableRoots: ReadonlyArray<string>,
   env: NodeJS.ProcessEnv = process.env,
 ): SafetyAssessment {
   if (command[0] === "apply_patch") {
     return command.length === 2 && typeof command[1] === "string"
-      ? canAutoApproveApplyPatch(command[1], writableRoots, policy)
+      ? canAutoApproveApplyPatch(command[1], workdir, writableRoots, policy)
       : {
           type: "reject",
           reason: "Invalid apply_patch command",
         };
-  }
-
-  // In 'suggest' mode, all shell commands should require user permission
-  if (policy === "suggest") {
-    return { type: "ask-user" };
   }
 
   const isSafe = isSafeCommand(command);
@@ -108,7 +104,12 @@ export function canAutoApprove(
   ) {
     const applyPatchArg = tryParseApplyPatch(command[2]);
     if (applyPatchArg != null) {
-      return canAutoApproveApplyPatch(applyPatchArg, writableRoots, policy);
+      return canAutoApproveApplyPatch(
+        applyPatchArg,
+        workdir,
+        writableRoots,
+        policy,
+      );
     }
 
     let bashCmd;
@@ -117,34 +118,31 @@ export function canAutoApprove(
     } catch (e) {
       // In practice, there seem to be syntactically valid shell commands that
       // shell-quote cannot parse, so we should not reject, but ask the user.
-      // We already checked for 'suggest' mode at the beginning of the function,
-      // so at this point we know policy is either 'auto-edit' or 'full-auto'
-      if (policy === "full-auto") {
-        // In full-auto, we still run the command automatically, but must
-        // restrict it to the sandbox.
-        return {
-          type: "auto-approve",
-          reason: "Full auto mode",
-          group: "Running commands",
-          runInSandbox: true,
-        };
-      } else {
-        // In auto-edit mode, since we cannot reason about the command, we
-        // should ask the user.
-        return {
-          type: "ask-user",
-        };
+      switch (policy) {
+        case "full-auto":
+          // In full-auto, we still run the command automatically, but must
+          // restrict it to the sandbox.
+          return {
+            type: "auto-approve",
+            reason: "Full auto mode",
+            group: "Running commands",
+            runInSandbox: true,
+          };
+        case "suggest":
+        case "auto-edit":
+          // In all other modes, since we cannot reason about the command, we
+          // should ask the user.
+          return {
+            type: "ask-user",
+          };
       }
     }
 
     // bashCmd could be a mix of strings and operators, e.g.:
     //   "ls || (true && pwd)" => [ 'ls', { op: '||' }, '(', 'true', { op: '&&' }, 'pwd', ')' ]
     // We try to ensure that *every* command segment is deemed safe and that
-    // all operators belong to an allow‑list. If so, the entire expression is
-    // considered auto‑approvable.
-
-    // We already checked for 'suggest' mode at the beginning of the function,
-    // so at this point we know policy is either 'auto-edit' or 'full-auto'
+    // all operators belong to an allow-list. If so, the entire expression is
+    // considered auto-approvable.
 
     const shellSafe = isEntireShellExpressionSafe(bashCmd);
     if (shellSafe != null) {
@@ -170,6 +168,7 @@ export function canAutoApprove(
 
 function canAutoApproveApplyPatch(
   applyPatchArg: string,
+  workdir: string | undefined,
   writableRoots: ReadonlyArray<string>,
   policy: ApprovalPolicy,
 ): SafetyAssessment {
@@ -187,7 +186,13 @@ function canAutoApproveApplyPatch(
       break;
   }
 
-  if (isWritePatchConstrainedToWritablePaths(applyPatchArg, writableRoots)) {
+  if (
+    isWritePatchConstrainedToWritablePaths(
+      applyPatchArg,
+      workdir,
+      writableRoots,
+    )
+  ) {
     return {
       type: "auto-approve",
       reason: "apply_patch command is constrained to writable paths",
@@ -216,6 +221,7 @@ function canAutoApproveApplyPatch(
  */
 function isWritePatchConstrainedToWritablePaths(
   applyPatchArg: string,
+  workdir: string | undefined,
   writableRoots: ReadonlyArray<string>,
 ): boolean {
   // `identify_files_needed()` returns a list of files that will be modified or
@@ -230,10 +236,12 @@ function isWritePatchConstrainedToWritablePaths(
   return (
     allPathsConstrainedTowritablePaths(
       identify_files_needed(applyPatchArg),
+      workdir,
       writableRoots,
     ) &&
     allPathsConstrainedTowritablePaths(
       identify_files_added(applyPatchArg),
+      workdir,
       writableRoots,
     )
   );
@@ -241,22 +249,45 @@ function isWritePatchConstrainedToWritablePaths(
 
 function allPathsConstrainedTowritablePaths(
   candidatePaths: ReadonlyArray<string>,
+  workdir: string | undefined,
   writableRoots: ReadonlyArray<string>,
 ): boolean {
   return candidatePaths.every((candidatePath) =>
-    isPathConstrainedTowritablePaths(candidatePath, writableRoots),
+    isPathConstrainedTowritablePaths(candidatePath, workdir, writableRoots),
   );
 }
 
 /** If candidatePath is relative, it will be resolved against cwd. */
 function isPathConstrainedTowritablePaths(
   candidatePath: string,
+  workdir: string | undefined,
   writableRoots: ReadonlyArray<string>,
 ): boolean {
-  const candidateAbsolutePath = path.resolve(candidatePath);
+  const candidateAbsolutePath = resolvePathAgainstWorkdir(
+    candidatePath,
+    workdir,
+  );
+
   return writableRoots.some((writablePath) =>
     pathContains(writablePath, candidateAbsolutePath),
   );
+}
+
+/**
+ * If not already an absolute path, resolves `candidatePath` against `workdir`
+ * if specified; otherwise, against `process.cwd()`.
+ */
+export function resolvePathAgainstWorkdir(
+  candidatePath: string,
+  workdir: string | undefined,
+): string {
+  if (path.isAbsolute(candidatePath)) {
+    return candidatePath;
+  } else if (workdir != null) {
+    return path.resolve(workdir, candidatePath);
+  } else {
+    return path.resolve(candidatePath);
+  }
 }
 
 /** Both `parent` and `child` must be absolute paths. */
@@ -322,7 +353,7 @@ export function isSafeCommand(
       };
     case "true":
       return {
-        reason: "No‑op (true)",
+        reason: "No-op (true)",
         group: "Utility",
       };
     case "echo":
@@ -337,11 +368,20 @@ export function isSafeCommand(
         reason: "Ripgrep search",
         group: "Searching",
       };
-    case "find":
-      return {
-        reason: "Find files or directories",
-        group: "Searching",
-      };
+    case "find": {
+      // Certain options to `find` allow executing arbitrary processes, so we
+      // cannot auto-approve them.
+      if (
+        command.some((arg: string) => UNSAFE_OPTIONS_FOR_FIND_COMMAND.has(arg))
+      ) {
+        break;
+      } else {
+        return {
+          reason: "Find files or directories",
+          group: "Searching",
+        };
+      }
+    }
     case "grep":
       return {
         reason: "Text search (grep)",
@@ -429,12 +469,27 @@ function isValidSedNArg(arg: string | undefined): boolean {
   return arg != null && /^(\d+,)?\d+p$/.test(arg);
 }
 
+const UNSAFE_OPTIONS_FOR_FIND_COMMAND: ReadonlySet<string> = new Set([
+  // Options that can execute arbitrary commands.
+  "-exec",
+  "-execdir",
+  "-ok",
+  "-okdir",
+  // Option that deletes matching files.
+  "-delete",
+  // Options that write pathnames to a file.
+  "-fls",
+  "-fprint",
+  "-fprint0",
+  "-fprintf",
+]);
+
 // ---------------- Helper utilities for complex shell expressions -----------------
 
-// A conservative allow‑list of bash operators that do not, on their own, cause
+// A conservative allow-list of bash operators that do not, on their own, cause
 // side effects. Redirections (>, >>, <, etc.) and command substitution `$()`
 // are intentionally excluded. Parentheses used for grouping are treated as
-// strings by `shell‑quote`, so we do not add them here. Reference:
+// strings by `shell-quote`, so we do not add them here. Reference:
 // https://github.com/substack/node-shell-quote#parsecmd-opts
 const SAFE_SHELL_OPERATORS: ReadonlySet<string> = new Set([
   "&&", // logical AND
@@ -460,7 +515,7 @@ function isEntireShellExpressionSafe(
   }
 
   try {
-    // Collect command segments delimited by operators. `shell‑quote` represents
+    // Collect command segments delimited by operators. `shell-quote` represents
     // subshell grouping parentheses as literal strings "(" and ")"; treat them
     // as unsafe to keep the logic simple (since subshells could introduce
     // unexpected scope changes).
@@ -528,7 +583,7 @@ function isParseEntryWithOp(
   return (
     typeof entry === "object" &&
     entry != null &&
-    // Using the safe `in` operator keeps the check property‑safe even when
+    // Using the safe `in` operator keeps the check property-safe even when
     // `entry` is a `string`.
     "op" in entry &&
     typeof (entry as { op?: unknown }).op === "string"

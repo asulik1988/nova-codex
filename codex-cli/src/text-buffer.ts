@@ -34,6 +34,10 @@ function clamp(v: number, min: number, max: number): number {
  * ---------------------------------------------------------------------- */
 
 function toCodePoints(str: string): Array<string> {
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const seg = new Intl.Segmenter();
+    return [...seg.segment(str)].map((seg) => seg.segment);
+  }
   // [...str] or Array.from both iterate by UTF‑32 code point, handling
   // surrogate pairs correctly.
   return Array.from(str);
@@ -108,7 +112,7 @@ export default class TextBuffer {
    * =================================================================== */
 
   /**
-   * Opens the current buffer contents in the user's preferred terminal text
+   * Opens the current buffer contents in the user’s preferred terminal text
    * editor ($VISUAL or $EDITOR, falling back to "vi").  The method blocks
    * until the editor exits, then reloads the file and replaces the in‑memory
    * buffer with whatever the user saved.
@@ -119,7 +123,7 @@ export default class TextBuffer {
    *
    * Note: We purposefully rely on the *synchronous* spawn API so that the
    * calling process genuinely waits for the editor to close before
-   * continuing.  This mirrors Git's behaviour and simplifies downstream
+   * continuing.  This mirrors Git’s behaviour and simplifies downstream
    * control‑flow (callers can simply `await` the Promise).
    */
   async openInExternalEditor(opts: { editor?: string } = {}): Promise<void> {
@@ -143,7 +147,7 @@ export default class TextBuffer {
 
     // Prepare a temporary file with the current contents.  We use mkdtempSync
     // to obtain an isolated directory and avoid name collisions.
-    const tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), "neo-edit-"));
+    const tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), "codex-edit-"));
     const filePath = pathMod.join(tmpDir, "buffer.txt");
 
     fs.writeFileSync(filePath, this.getText(), "utf8");
@@ -423,7 +427,7 @@ export default class TextBuffer {
   /** Delete the word to the *left* of the caret, mirroring common
    *  Ctrl/Alt+Backspace behaviour in editors & terminals.  Both the adjacent
    *  whitespace *and* the word characters immediately preceding the caret are
-   *  removed.  If the caret is already at column‑0 this becomes a no‑op. */
+   *  removed.  If the caret is already at column‑0 this becomes a no-op. */
   deleteWordLeft(): void {
     dbg("deleteWordLeft", { beforeCursor: this.getCursor() });
 
@@ -710,7 +714,7 @@ export default class TextBuffer {
   }
 
   endSelection(): void {
-    // no‑op for now, kept for API symmetry
+    // no-op for now, kept for API symmetry
     // we rely on anchor + current cursor to compute selection
   }
 
